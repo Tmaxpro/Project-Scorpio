@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(touch \\\\ *)"
+    ],
+    "additionalDirectories": [
+      "/home/hun73r/Documents/Project_Scorpio/app"
+    ]
+  }
+}
