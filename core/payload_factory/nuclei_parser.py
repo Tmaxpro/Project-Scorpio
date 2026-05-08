@@ -11,7 +11,7 @@ class NucleiPayloadAdapter:
         self._index = nuclei_index
 
     def get_payloads(self, category: str) -> list[str]:
-        return self._index.get_payloads().get(category, [])
+        return self._index.get_payloads(category)
 
     def get_matchers(self, category: str) -> list[dict]:
-        return self._index.get_matchers().get(category, [])
+        return self._index.get_matchers(category)

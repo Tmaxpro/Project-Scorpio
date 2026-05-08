@@ -4,8 +4,6 @@ from __future__ import annotations
 import re
 from unittest.mock import MagicMock
 
-import pytest
-
 from core.agents.base_agent import AgentDecision
 from core.coordinator.task_builder import Task
 from core.parser.openapi_parser import EndpointInfo
@@ -13,7 +11,6 @@ from core.payload_factory.exploit_modules.bola_exploit import build_bola_payload
 from core.payload_factory.exploit_modules.jwt_exploit import (
     _make_none_alg_jwt,
     _make_hs256_jwt,
-    _make_expired_jwt,
     build_jwt_payloads,
 )
 from core.payload_factory.exploit_modules.mass_assign_exploit import build_mass_assign_payloads
@@ -173,16 +170,18 @@ class TestNucleiPayloadAdapter:
 
     def test_get_payloads_delegates_to_index(self):
         mock_idx = MagicMock()
-        mock_idx.get_payloads.return_value = {"API8": ["payload1"]}
+        mock_idx.get_payloads.return_value = ["payload1"]
         adapter = NucleiPayloadAdapter(mock_idx)
         result = adapter.get_payloads("API8")
+        mock_idx.get_payloads.assert_called_once_with("API8")
         assert result == ["payload1"]
 
     def test_get_matchers_delegates_to_index(self):
         mock_idx = MagicMock()
-        mock_idx.get_matchers.return_value = {"API2": [{"type": "status"}]}
+        mock_idx.get_matchers.return_value = [{"type": "status"}]
         adapter = NucleiPayloadAdapter(mock_idx)
         result = adapter.get_matchers("API2")
+        mock_idx.get_matchers.assert_called_once_with("API2")
         assert result == [{"type": "status"}]
 
 
