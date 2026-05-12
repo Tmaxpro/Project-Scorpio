@@ -79,16 +79,30 @@ Open `http://localhost:8000` in your browser.
 ### 5 — Run a scan (API)
 
 ```bash
-curl -X POST http://localhost:8000/scan \
+curl -X POST http://localhost:8000/api/scan \
   -H "Content-Type: application/json" \
   -d '{
-    "openapi_yaml": "<paste spec here>",
-    "base_url": "http://target-api:8080",
-    "auth_type": "bearer",
-    "credentials": {"token": "eyJ..."},
-    "context": "Internal staging API, user roles: admin/user",
-    "owasp_categories": ["API1", "API2", "API6", "API8"]
+    "spec": "<OpenAPI 3.x YAML or JSON content>",
+    "target_url": "http://target-api:8080",
+    "auth_token": "eyJ...",
+    "owasp_filter": ["API1", "API2", "API6", "API8"],
+    "max_payloads_per_endpoint": 20
   }'
+```
+
+Poll for status:
+```bash
+curl http://localhost:8000/api/scan/{scan_id}
+```
+
+Get findings:
+```bash
+curl http://localhost:8000/api/scan/{scan_id}/results
+```
+
+Download HTML report:
+```bash
+curl http://localhost:8000/api/scan/{scan_id}/report -o report.html
 ```
 
 ---
@@ -99,12 +113,20 @@ curl -X POST http://localhost:8000/scan \
 docker compose up --build
 ```
 
-This starts both Ollama and ARIA. Pull models into the running container:
+This starts both Ollama and ARIA. Pull models into the running Ollama container:
 
 ```bash
-docker exec -it aria_ollama_1 \
+docker exec -it project_scorpio-ollama-1 \
   ollama pull hf.co/fdtn-ai/Foundation-Sec-8B-Reasoning-Q8_0-GGUF
+
+docker exec -it project_scorpio-ollama-1 \
+  ollama pull hf.co/fdtn-ai/Foundation-Sec-1.1-8B-Instruct-Q4_K_M-GGUF
+
+docker exec -it project_scorpio-ollama-1 \
+  ollama pull qwen2.5:7b
 ```
+
+Open `http://localhost:8000` once models are pulled.
 
 ---
 
@@ -157,11 +179,23 @@ data/owasp/   OWASP API Top 10 markdown (RAG knowledge base)
 
 ## Academic benchmarking
 
+Run the pipeline in dry mode (no Ollama or live target required):
+
 ```bash
-python benchmarks/run_benchmark.py --target http://localhost:5000 \
-  --spec tests/fixtures/vampi_openapi.yaml
+# Built-in fixture (5-endpoint VAmPI-like spec)
+python benchmarks/run_benchmark.py
+
+# Custom spec
+python benchmarks/run_benchmark.py --spec path/to/openapi.yaml
+```
+
+View aggregated LLM usage metrics from past scans:
+
+```bash
+python benchmarks/metrics.py                          # all runs in benchmarks/runs/
+python benchmarks/metrics.py --file benchmarks/runs/<scan_id>.jsonl
 ```
 
 Metrics logged per scan to `benchmarks/runs/{scan_id}.jsonl`:
-`timestamp`, `task_id`, `model_used`, `tokens_in`, `tokens_out`,
+`timestamp`, `task_id`, `model_used`, `task_type`, `tokens_in`, `tokens_out`,
 `latency_ms`, `success`.
