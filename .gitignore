@@ -1,3 +1,155 @@
-.pytest_cache/
-__pycache__/
+# ─────────────────────────────────────────────
+#  Project Scorpio — .gitignore
+# ─────────────────────────────────────────────
 
+# ── Python ────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+wheels/
+*.whl
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+.installed.cfg
+lib/
+lib64/
+
+# ── Virtual environments ───────────────────────
+.venv/
+venv/
+env/
+ENV/
+.env/
+.virtualenv/
+
+# ── Testing & coverage ────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+nosetests.xml
+*.cover
+*.log
+junit*.xml
+
+# ── Type checkers ─────────────────────────────
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyright/
+.ruff_cache/
+
+# ── Jupyter ───────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ─────────────────────────────────────────────
+#  Secrets & sensitive config
+# ─────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+secrets/
+secret.yaml
+secret.yml
+*_secret.yaml
+*_secret.yml
+credentials.json
+credentials.yaml
+tokens.json
+auth.json
+
+# ─────────────────────────────────────────────
+#  Generated outputs (pentest reports, logs)
+# ─────────────────────────────────────────────
+reports/
+!reports/.gitkeep
+benchmarks/runs/
+!benchmarks/runs/.gitkeep
+
+# Raw scan artefacts
+*.jsonl
+*.sarif
+scan_results/
+scan_output/
+nuclei_output/
+*.nuclei.json
+
+# ─────────────────────────────────────────────
+#  Vector DB / ML data (heavy, local-only)
+# ─────────────────────────────────────────────
+data/chroma/
+data/embeddings/
+data/cache/
+*.faiss
+*.index
+*.pkl
+*.pickle
+*.bin           # model weights / binary blobs
+*.gguf          # local LLM model files
+*.ggml
+*.safetensors
+*.pt
+*.pth
+
+# ─────────────────────────────────────────────
+#  Docker
+# ─────────────────────────────────────────────
+.dockerignore   # usually fine, but keep it out of VCS noise
+docker-compose.override.yml
+docker-compose.local.yml
+
+# ─────────────────────────────────────────────
+#  IDE & editors
+# ─────────────────────────────────────────────
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json.example
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─────────────────────────────────────────────
+#  OS
+# ─────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+Thumbs.db
+ehthumbs.db
+
+# ─────────────────────────────────────────────
+#  Misc / temp
+# ─────────────────────────────────────────────
+tmp/
+temp/
+*.tmp
+*.bak
+*.orig
+*.patch
+*.diff
+scratch/

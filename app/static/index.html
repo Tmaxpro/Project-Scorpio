@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARIA — API Security Scanner</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', monospace; background: #0d1117; color: #c9d1d9; min-height: 100vh; }
+  header { background: #161b22; border-bottom: 1px solid #30363d; padding: 1rem 2rem; display: flex; align-items: center; gap: 1rem; }
+  header h1 { color: #58a6ff; font-size: 1.4rem; }
+  header span { color: #8b949e; font-size: 0.85rem; }
+  main { max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
+  h2 { color: #58a6ff; font-size: 1rem; margin-bottom: 1rem; }
+  label { display: block; color: #8b949e; font-size: 0.8rem; margin-bottom: 0.3rem; margin-top: 0.8rem; }
+  input, textarea { width: 100%; background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; border-radius: 4px; padding: 0.5rem; font-family: monospace; font-size: 0.85rem; }
+  textarea { resize: vertical; min-height: 180px; }
+  input:focus, textarea:focus { outline: none; border-color: #58a6ff; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  button { background: #238636; color: #fff; border: none; border-radius: 6px; padding: 0.6rem 1.2rem; font-size: 0.9rem; cursor: pointer; margin-top: 1rem; }
+  button:hover { background: #2ea043; }
+  button:disabled { background: #21262d; color: #8b949e; cursor: not-allowed; }
+  .btn-sec { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; }
+  .btn-sec:hover { background: #30363d; }
+  #status-box { display: none; }
+  .progress-bar { height: 6px; background: #21262d; border-radius: 3px; margin: 0.5rem 0; }
+  .progress-fill { height: 100%; background: #58a6ff; border-radius: 3px; transition: width 0.4s; }
+  .status-msg { color: #8b949e; font-size: 0.85rem; }
+  .completed { color: #3fb950; }
+  .failed { color: #f85149; }
+  #results-card { display: none; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th { background: #21262d; padding: 8px 10px; text-align: left; border: 1px solid #30363d; }
+  td { padding: 8px 10px; border: 1px solid #30363d; }
+  .sev-high { color: #f85149; font-weight: bold; }
+  .sev-medium { color: #e3b341; font-weight: bold; }
+  .sev-low { color: #3fb950; }
+  .sev-info { color: #8b949e; }
+  .ok { color: #3fb950; padding: 1rem 0; }
+  #report-link { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ARIA</h1>
+  <span>Autonomous REST API Intelligence Agent · OWASP API Top 10</span>
+</header>
+<main>
+  <div class="card">
+    <h2>New Scan</h2>
+    <label>OpenAPI Specification (YAML or JSON)</label>
+    <textarea id="spec" placeholder="Paste your OpenAPI 3.x spec here..."></textarea>
+    <div class="row">
+      <div>
+        <label>Target URL</label>
+        <input id="target" type="url" placeholder="http://localhost:8000">
+      </div>
+      <div>
+        <label>Bearer Token (optional)</label>
+        <input id="token" type="password" placeholder="eyJ...">
+      </div>
+    </div>
+    <label>OWASP Filter (comma-separated, empty = all categories)</label>
+    <input id="owasp" placeholder="e.g. API1,API2,API8">
+    <button id="scan-btn" onclick="startScan()">Start Scan</button>
+  </div>
+
+  <div class="card" id="status-box">
+    <h2>Scan Status</h2>
+    <small id="scan-id-lbl" style="color:#8b949e;display:block;margin-bottom:0.5rem"></small>
+    <div class="progress-bar"><div class="progress-fill" id="progress" style="width:0%"></div></div>
+    <div class="status-msg" id="status-msg">Initializing...</div>
+    <div id="report-link" style="margin-top:0.75rem">
+      <a href="#" id="report-href" target="_blank">
+        <button class="btn-sec">View Full HTML Report</button>
+      </a>
+    </div>
+  </div>
+
+  <div class="card" id="results-card">
+    <h2>Findings</h2>
+    <div id="results-body"></div>
+  </div>
+</main>
+
+<script>
+let _scanId = null, _poll = null;
+
+async function startScan() {
+  const spec = document.getElementById('spec').value.trim();
+  const target = document.getElementById('target').value.trim();
+  if (!spec)   { alert('Paste an OpenAPI spec first.'); return; }
+  if (!target) { alert('Enter a target URL.'); return; }
+
+  const owaspRaw = document.getElementById('owasp').value.trim();
+  const owaspFilter = owaspRaw ? owaspRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+  document.getElementById('scan-btn').disabled = true;
+  document.getElementById('status-box').style.display = 'block';
+  document.getElementById('results-card').style.display = 'none';
+  document.getElementById('report-link').style.display = 'none';
+
+  try {
+    const res = await fetch('/api/scan', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        spec, target_url: target,
+        auth_token: document.getElementById('token').value.trim(),
+        owasp_filter: owaspFilter,
+        max_payloads_per_endpoint: 20,
+      }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    _scanId = data.scan_id;
+    document.getElementById('scan-id-lbl').textContent = `Scan ID: ${_scanId}`;
+    _poll = setInterval(pollStatus, 2000);
+  } catch (e) {
+    document.getElementById('status-msg').textContent = 'Error: ' + e.message;
+    document.getElementById('scan-btn').disabled = false;
+  }
+}
+
+async function pollStatus() {
+  if (!_scanId) return;
+  try {
+    const data = await (await fetch(`/api/scan/${_scanId}`)).json();
+    document.getElementById('progress').style.width = (data.progress * 100) + '%';
+    const el = document.getElementById('status-msg');
+    el.textContent = data.message;
+    el.className = 'status-msg' + (data.status === 'completed' ? ' completed' : data.status === 'failed' ? ' failed' : '');
+
+    if (data.status === 'completed' || data.status === 'failed') {
+      clearInterval(_poll);
+      document.getElementById('scan-btn').disabled = false;
+      document.getElementById('report-href').href = `/api/scan/${_scanId}/report`;
+      document.getElementById('report-link').style.display = 'block';
+      if (data.status === 'completed') loadResults();
+    }
+  } catch (_) { /* keep polling on transient error */ }
+}
+
+async function loadResults() {
+  const data = await (await fetch(`/api/scan/${_scanId}/results`)).json();
+  const card = document.getElementById('results-card');
+  card.style.display = 'block';
+  const body = document.getElementById('results-body');
+
+  if (!data.findings.length) {
+    body.innerHTML = '<p class="ok">✓ No vulnerabilities detected.</p>';
+    return;
+  }
+
+  const rows = data.findings.map(f => {
+    const s = f.severity.toLowerCase();
+    return `<tr>
+      <td>${esc(f.endpoint)}</td>
+      <td>${esc(f.vuln_category)}</td>
+      <td class="sev-${s}">${f.severity.toUpperCase()}</td>
+      <td>${esc(f.rule_ids.join(', '))}</td>
+      <td title="${esc(f.evidence)}">${esc(f.evidence.slice(0, 80))}</td>
+    </tr>`;
+  }).join('');
+
+  body.innerHTML =
+    `<p style="color:#8b949e;margin-bottom:0.5rem">` +
+    `${data.vulnerable_count} vulnerable · ${data.total_requests} requests sent</p>` +
+    `<table><tr><th>Endpoint</th><th>Category</th><th>Severity</th><th>Rules</th><th>Evidence</th></tr>` +
+    rows + `</table>`;
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
