@@ -68,15 +68,34 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4 — Start the server
+### 4 — Start the backend
 
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Open `http://localhost:8000` in your browser.
+The legacy single-page UI is available at `http://localhost:8000`.
 
-### 5 — Run a scan (API)
+### 5 — Start the frontend (optional)
+
+The React frontend lives in `aria-fontend/` and connects to the backend at port 8000.
+
+```bash
+cd aria-fontend
+npm install
+npm run dev        # starts Vite dev server on http://localhost:5173
+```
+
+Or build for production:
+```bash
+npm run build
+```
+
+---
+
+## API reference
+
+### Submit a scan
 
 ```bash
 curl -X POST http://localhost:8000/api/scan \
@@ -84,25 +103,73 @@ curl -X POST http://localhost:8000/api/scan \
   -d '{
     "spec": "<OpenAPI 3.x YAML or JSON content>",
     "target_url": "http://target-api:8080",
-    "auth_token": "eyJ...",
+    "auth_type": "bearer",
+    "credentials": {"token": "eyJ..."},
     "owasp_filter": ["API1", "API2", "API6", "API8"],
     "max_payloads_per_endpoint": 20
   }'
 ```
 
-Poll for status:
+**Auth types:** `bearer` · `apikey` (credentials: `{name, value, in: header|query}`) · `basic` (credentials: `{username, password}`) · `none`
+
+**Response:** `{ "scan_id": "<uuid>", "message": "Scan queued" }`
+
+### Poll status
+
 ```bash
 curl http://localhost:8000/api/scan/{scan_id}
 ```
 
-Get findings:
+Returns `status` (`pending` → `running` → `completed` | `failed`), `progress` (0–1), `message`, `target`, timing fields, and counts.
+
+### Real-time events (SSE)
+
+```bash
+curl -N http://localhost:8000/api/scan/{scan_id}/events
+```
+
+Stream of newline-delimited JSON events:
+
+| Event type | Data fields |
+|-----------|-------------|
+| `scan_info` | `total_tasks` |
+| `task_started` | `task_id`, `endpoint`, `method`, `vuln_category`, `agent` |
+| `task_completed` | `task_id`, `endpoint`, `progress` |
+| `finding` | `finding` (full TaskResult object) |
+| `scan_completed` | `vulnerable_count`, `total_requests` |
+| `error` | `message` |
+
+### Get findings
+
 ```bash
 curl http://localhost:8000/api/scan/{scan_id}/results
 ```
 
-Download HTML report:
+Returns `findings[]` with `endpoint`, `method`, `vuln_category`, `owasp_ref`, `severity`, `confidence`, `rule_ids`, `evidence`, `remediation`, `confirmed_by_slm`.
+
+### Download report
+
 ```bash
-curl http://localhost:8000/api/scan/{scan_id}/report -o report.html
+curl "http://localhost:8000/api/scan/{scan_id}/report" -o report.html
+curl "http://localhost:8000/api/scan/{scan_id}/report?format=markdown" -o report.md
+```
+
+### List all scans
+
+```bash
+curl http://localhost:8000/api/scan
+```
+
+### Benchmarks
+
+```bash
+# List stored benchmark runs
+curl http://localhost:8000/api/benchmarks
+
+# Trigger a dry-run benchmark (no Ollama required)
+curl -X POST http://localhost:8000/api/benchmarks/run \
+  -H "Content-Type: application/json" \
+  -d '{"spec_name": "fixture"}'
 ```
 
 ---
@@ -161,18 +228,20 @@ OLLAMA_URL=http://ollama:11434 uvicorn app.main:app
 ## Project structure
 
 ```
-app/          FastAPI entry point, routers, schemas, static UI
-core/llm/     LLMClient — unified SLM interface with retry/fallback
-core/parser/  OpenAPI YAML parser + endpoint enricher
+app/               FastAPI backend — routers, schemas, scan runner
+app/routers/       scan (CRUD + SSE) and benchmarks endpoints
+aria-fontend/      React + TanStack Router frontend (Vite)
+core/llm/          LLMClient — unified SLM interface with retry/fallback
+core/parser/       OpenAPI YAML parser + endpoint enricher
 core/coordinator/  Scan planner (LLM-based + rule-based fallback)
-core/agents/  Per-OWASP-category attack agents (same SLM, diff prompts)
+core/agents/       Per-OWASP-category attack agents (same SLM, diff prompts)
 core/payload_factory/  Deterministic payload builder + exploit modules
-core/http_engine/      Async HTTP client with auth injection
+core/http_engine/      Async HTTP client with auth injection + rate control
 core/validator/        Rule-based + SLM-assisted finding validation
 core/rag/              ChromaDB vector store for OWASP knowledge
 core/reporter/         HTML + Markdown report generation
-benchmarks/   Academic evaluation scripts and metrics
-data/owasp/   OWASP API Top 10 markdown (RAG knowledge base)
+benchmarks/        Dry-run pipeline evaluation and LLM usage metrics
+data/owasp/        OWASP API Top 10 markdown (RAG knowledge base)
 ```
 
 ---
