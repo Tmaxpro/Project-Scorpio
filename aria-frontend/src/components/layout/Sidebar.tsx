@@ -6,9 +6,12 @@ import {
   ChevronRight,
   Clock,
   FileText,
+  Settings,
   Zap,
 } from "lucide-react";
-import { checkHealth } from "@/lib/api";
+import { checkHealth, getModelsConfig, listBenchmarkRunsLocal } from "@/lib/api";
+import type { ModelsResponse } from "@/lib/types";
+import { MODEL_ROLE_META } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -16,11 +19,14 @@ const NAV = [
   { to: "/history", label: "History", icon: Clock },
   { to: "/reports", label: "Reports", icon: FileText },
   { to: "/benchmarks", label: "Benchmarks", icon: BarChart2 },
+  { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [online, setOnline] = useState<boolean>(false);
+  const [benchmarkCount, setBenchmarkCount] = useState<number>(0);
+  const [modelsConfig, setModelsConfig] = useState<ModelsResponse | null>(null);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   useEffect(() => {
@@ -29,13 +35,49 @@ export function Sidebar() {
       const ok = await checkHealth();
       if (mounted) setOnline(ok);
     };
+    const refreshBenchmarks = () => {
+      if (!mounted) return;
+      const runs = listBenchmarkRunsLocal();
+      setBenchmarkCount(runs.filter((r) => r.status === "completed").length);
+    };
+    const refreshModels = async () => {
+      if (!mounted) return;
+      try {
+        const cfg = await getModelsConfig();
+        if (mounted) setModelsConfig(cfg);
+      } catch {
+        // Backend may be offline — silently ignore
+      }
+    };
     ping();
+    refreshBenchmarks();
+    refreshModels();
     const id = setInterval(ping, 10_000);
+    const benchId = setInterval(refreshBenchmarks, 3_000);
+    const modelsId = setInterval(refreshModels, 15_000);
     return () => {
       mounted = false;
       clearInterval(id);
+      clearInterval(benchId);
+      clearInterval(modelsId);
     };
   }, []);
+
+  // Extract short display names from model names
+  const getShortName = (name: string) => {
+    if (name.includes("/")) {
+      const last = name.split("/").pop() || name;
+      return last.replace(/-GGUF$/, "").replace(/[-_]Q\d.*$/, "").slice(0, 22);
+    }
+    return name.slice(0, 22);
+  };
+
+  const ROLE_ORDER = ["reasoning_model", "instruct_model", "fallback_model"] as const;
+  const dotColors: Record<string, string> = {
+    cyan: "bg-cyan",
+    violet: "bg-violet",
+    warning: "bg-warning",
+  };
 
   return (
     <aside
@@ -77,6 +119,7 @@ export function Sidebar() {
         <ul className="space-y-1">
           {NAV.map(({ to, label, icon: Icon }) => {
             const active = pathname === to || pathname.startsWith(to + "/");
+            const showBadge = to === "/benchmarks" && benchmarkCount > 0;
             return (
               <li key={to}>
                 <Link
@@ -98,6 +141,14 @@ export function Sidebar() {
                       {label}
                     </span>
                   )}
+                  {showBadge && !collapsed && (
+                    <span className="ml-auto rounded-full bg-card px-2 py-0.5 font-mono text-[9px] tabular-nums text-muted-foreground">
+                      {benchmarkCount}
+                    </span>
+                  )}
+                  {showBadge && collapsed && (
+                    <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary" />
+                  )}
                 </Link>
               </li>
             );
@@ -113,14 +164,26 @@ export function Sidebar() {
               Active Models
             </div>
             <div className="space-y-0.5 font-mono text-[10px] text-foreground/80">
-              <div className="flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-cyan" />
-                Foundation-Sec-8B
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-violet" />
-                Qwen2.5-7B
-              </div>
+              {modelsConfig ? (
+                ROLE_ORDER.map((role) => {
+                  const model = modelsConfig.models[role];
+                  if (!model) return null;
+                  const meta = MODEL_ROLE_META[role];
+                  return (
+                    <div key={role} className="flex items-center gap-1.5" title={`${meta.label}: ${model.name}`}>
+                      <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dotColors[meta.color])} />
+                      <span className="truncate">{getShortName(model.name)}</span>
+                    </div>
+                  );
+                })
+              ) : (
+                <>
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-border animate-pulse" />
+                    <span className="text-muted-foreground/50">Loading...</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}

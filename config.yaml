@@ -2,39 +2,38 @@ llm:
   provider: ollama
   base_url: http://localhost:11434
   max_retries: 3
-
   reasoning_model:
     name: hf.co/fdtn-ai/Foundation-Sec-8B-Reasoning-Q8_0-GGUF
     temperature: 0.2
     max_tokens: 2048
-    use_for: [coordinator, agents]
-
+    use_for:
+    - coordinator
+    - agents
   instruct_model:
     name: hf.co/fdtn-ai/Foundation-Sec-1.1-8B-Instruct-Q4_K_M-GGUF
     temperature: 0.1
     max_tokens: 1024
-    use_for: [validator, reporter]
-
+    use_for:
+    - validator
+    - reporter
   fallback_model:
     name: qwen2.5:7b
     temperature: 0.1
     max_tokens: 2048
-
 scan:
   max_concurrent_agents: 3
   request_timeout: 10
   rate_limit_delay: 0.5
   max_payloads_per_endpoint: 50
-
 rag:
   chroma_persist_dir: ./data/chroma
   embedding_model: all-MiniLM-L6-v2
   top_k: 5
-
 report:
   output_dir: ./reports
-  formats: [html, markdown]
-
+  formats:
+  - html
+  - markdown
 benchmarking:
   enabled: true
   log_path: ./benchmarks/runs/

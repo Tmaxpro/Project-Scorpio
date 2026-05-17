@@ -9,13 +9,20 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as HistoryRouteImport } from './routes/history'
 import { Route as BenchmarksRouteImport } from './routes/benchmarks'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ScanNewRouteImport } from './routes/scan.new'
 import { Route as ScanIdRouteImport } from './routes/scan.$id'
+import { Route as BenchmarksRunIdRouteImport } from './routes/benchmarks.$runId'
 
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ReportsRoute = ReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
@@ -46,29 +53,40 @@ const ScanIdRoute = ScanIdRouteImport.update({
   path: '/scan/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BenchmarksRunIdRoute = BenchmarksRunIdRouteImport.update({
+  id: '/$runId',
+  path: '/$runId',
+  getParentRoute: () => BenchmarksRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/benchmarks': typeof BenchmarksRoute
+  '/benchmarks': typeof BenchmarksRouteWithChildren
   '/history': typeof HistoryRoute
   '/reports': typeof ReportsRoute
+  '/settings': typeof SettingsRoute
+  '/benchmarks/$runId': typeof BenchmarksRunIdRoute
   '/scan/$id': typeof ScanIdRoute
   '/scan/new': typeof ScanNewRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/benchmarks': typeof BenchmarksRoute
+  '/benchmarks': typeof BenchmarksRouteWithChildren
   '/history': typeof HistoryRoute
   '/reports': typeof ReportsRoute
+  '/settings': typeof SettingsRoute
+  '/benchmarks/$runId': typeof BenchmarksRunIdRoute
   '/scan/$id': typeof ScanIdRoute
   '/scan/new': typeof ScanNewRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/benchmarks': typeof BenchmarksRoute
+  '/benchmarks': typeof BenchmarksRouteWithChildren
   '/history': typeof HistoryRoute
   '/reports': typeof ReportsRoute
+  '/settings': typeof SettingsRoute
+  '/benchmarks/$runId': typeof BenchmarksRunIdRoute
   '/scan/$id': typeof ScanIdRoute
   '/scan/new': typeof ScanNewRoute
 }
@@ -79,31 +97,51 @@ export interface FileRouteTypes {
     | '/benchmarks'
     | '/history'
     | '/reports'
+    | '/settings'
+    | '/benchmarks/$runId'
     | '/scan/$id'
     | '/scan/new'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/benchmarks' | '/history' | '/reports' | '/scan/$id' | '/scan/new'
+  to:
+    | '/'
+    | '/benchmarks'
+    | '/history'
+    | '/reports'
+    | '/settings'
+    | '/benchmarks/$runId'
+    | '/scan/$id'
+    | '/scan/new'
   id:
     | '__root__'
     | '/'
     | '/benchmarks'
     | '/history'
     | '/reports'
+    | '/settings'
+    | '/benchmarks/$runId'
     | '/scan/$id'
     | '/scan/new'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  BenchmarksRoute: typeof BenchmarksRoute
+  BenchmarksRoute: typeof BenchmarksRouteWithChildren
   HistoryRoute: typeof HistoryRoute
   ReportsRoute: typeof ReportsRoute
+  SettingsRoute: typeof SettingsRoute
   ScanIdRoute: typeof ScanIdRoute
   ScanNewRoute: typeof ScanNewRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reports': {
       id: '/reports'
       path: '/reports'
@@ -146,14 +184,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ScanIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/benchmarks/$runId': {
+      id: '/benchmarks/$runId'
+      path: '/$runId'
+      fullPath: '/benchmarks/$runId'
+      preLoaderRoute: typeof BenchmarksRunIdRouteImport
+      parentRoute: typeof BenchmarksRoute
+    }
   }
 }
 
+interface BenchmarksRouteChildren {
+  BenchmarksRunIdRoute: typeof BenchmarksRunIdRoute
+}
+
+const BenchmarksRouteChildren: BenchmarksRouteChildren = {
+  BenchmarksRunIdRoute: BenchmarksRunIdRoute,
+}
+
+const BenchmarksRouteWithChildren = BenchmarksRoute._addFileChildren(
+  BenchmarksRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  BenchmarksRoute: BenchmarksRoute,
+  BenchmarksRoute: BenchmarksRouteWithChildren,
   HistoryRoute: HistoryRoute,
   ReportsRoute: ReportsRoute,
+  SettingsRoute: SettingsRoute,
   ScanIdRoute: ScanIdRoute,
   ScanNewRoute: ScanNewRoute,
 }

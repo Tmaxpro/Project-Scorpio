@@ -9,6 +9,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.routers.benchmarks import router as benchmarks_router
+from app.routers.models import router as models_router
 from app.routers.scan import router as scan_router
 
 app = FastAPI(
@@ -35,6 +36,7 @@ app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 app.include_router(scan_router)
 app.include_router(benchmarks_router)
+app.include_router(models_router)
 
 
 @app.get("/", include_in_schema=False)
