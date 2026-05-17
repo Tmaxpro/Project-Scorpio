@@ -55,11 +55,13 @@ export function Sidebar() {
     const id = setInterval(ping, 10_000);
     const benchId = setInterval(refreshBenchmarks, 3_000);
     const modelsId = setInterval(refreshModels, 15_000);
+    window.addEventListener("aria:models-updated", refreshModels);
     return () => {
       mounted = false;
       clearInterval(id);
       clearInterval(benchId);
       clearInterval(modelsId);
+      window.removeEventListener("aria:models-updated", refreshModels);
     };
   }, []);
 

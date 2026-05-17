@@ -1,204 +1,130 @@
-"""FastAPI router — LLM model configuration management."""
+"""Model configuration router — dynamic SLM assignment via /api/models."""
 from __future__ import annotations
 
-import logging
-from enum import Enum
+import os
 from pathlib import Path
 
+import httpx
 import yaml
-import ollama
-
 from fastapi import APIRouter, HTTPException
 
 from app.schemas.models import (
     AvailableModelsResponse,
     ModelConfig,
+    ModelRole,
     ModelUpdateRequest,
     ModelUpdateResponse,
     ModelsResponse,
     OllamaModelInfo,
 )
 
-logger = logging.getLogger(__name__)
-
 router = APIRouter(prefix="/api/models", tags=["models"])
 
-CONFIG_PATH = Path("config.yaml")
+_CONFIG_PATH = Path(os.environ.get("ARIA_CONFIG", "config.yaml"))
 
-VALID_ROLES = ("reasoning_model", "instruct_model", "fallback_model")
-
-
-class ModelRole(str, Enum):
-    reasoning_model = "reasoning_model"
-    instruct_model = "instruct_model"
-    fallback_model = "fallback_model"
+_ROLE_KEYS: list[ModelRole] = ["reasoning_model", "instruct_model", "fallback_model"]
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
-
-
-def _read_config() -> dict:
-    """Read and return the full config.yaml as a dict."""
-    with CONFIG_PATH.open() as fh:
+def _load_config() -> dict:
+    with _CONFIG_PATH.open() as fh:
         return yaml.safe_load(fh)
 
 
-def _write_config(cfg: dict) -> None:
-    """Persist the config dict back to config.yaml."""
-    with CONFIG_PATH.open("w") as fh:
-        yaml.dump(cfg, fh, default_flow_style=False, sort_keys=False, allow_unicode=True)
+def _save_config(cfg: dict) -> None:
+    with _CONFIG_PATH.open("w") as fh:
+        yaml.dump(cfg, fh, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
 
-def _model_cfg_to_schema(role: str, raw: dict) -> ModelConfig:
-    """Convert a raw config dict section to a ModelConfig schema."""
+def _model_config_from_yaml(raw: dict) -> ModelConfig:
     return ModelConfig(
         name=raw["name"],
-        temperature=raw.get("temperature", 0.2),
-        max_tokens=raw.get("max_tokens", 2048),
+        temperature=raw["temperature"],
+        max_tokens=raw["max_tokens"],
         use_for=raw.get("use_for", []),
     )
 
 
-def _format_size(size_bytes: int) -> str:
-    """Format bytes into a human-readable string."""
-    if size_bytes <= 0:
-        return ""
-    for unit in ("B", "KB", "MB", "GB"):
-        if size_bytes < 1024:
-            return f"{size_bytes:.1f} {unit}"
-        size_bytes /= 1024
-    return f"{size_bytes:.1f} TB"
-
-
-# ── Endpoints ────────────────────────────────────────────────────────────────
-
-
 @router.get("", response_model=ModelsResponse)
 async def get_models_config() -> ModelsResponse:
-    """Return the current LLM model configuration."""
-    try:
-        cfg = _read_config()
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to read config: {exc}")
-
-    llm = cfg.get("llm", {})
-    models: dict[str, ModelConfig] = {}
-    for role in VALID_ROLES:
-        raw = llm.get(role)
-        if raw:
-            models[role] = _model_cfg_to_schema(role, raw)
-
+    """Return the current model-role assignments from config.yaml."""
+    cfg = _load_config()
+    llm = cfg["llm"]
     return ModelsResponse(
         provider=llm.get("provider", "ollama"),
         base_url=llm.get("base_url", "http://localhost:11434"),
         max_retries=llm.get("max_retries", 3),
-        models=models,
+        models={
+            role: _model_config_from_yaml(llm[role])
+            for role in _ROLE_KEYS
+        },
     )
 
 
 @router.put("/{role}", response_model=ModelUpdateResponse)
 async def update_model(role: ModelRole, body: ModelUpdateRequest) -> ModelUpdateResponse:
-    """Update the model assigned to a given role.
+    """Update the model name and inference parameters for a given pipeline role."""
+    cfg = _load_config()
+    llm = cfg["llm"]
 
-    Persists the change to config.yaml immediately.
-    """
-    try:
-        cfg = _read_config()
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to read config: {exc}")
+    if role not in llm:
+        raise HTTPException(status_code=404, detail=f"Role '{role}' not found in config")
 
-    llm = cfg.get("llm", {})
-    existing = llm.get(role.value)
-    if existing is None:
-        raise HTTPException(status_code=404, detail=f"Role '{role.value}' not found in config")
+    llm[role]["name"] = body.name
+    llm[role]["temperature"] = body.temperature
+    llm[role]["max_tokens"] = body.max_tokens
 
-    # Preserve use_for from existing config
-    use_for = existing.get("use_for", [])
+    _save_config(cfg)
 
-    # Update the model entry
-    llm[role.value] = {
-        "name": body.name,
-        "temperature": body.temperature,
-        "max_tokens": body.max_tokens,
-    }
-    if use_for:
-        llm[role.value]["use_for"] = use_for
-
-    cfg["llm"] = llm
-
-    try:
-        _write_config(cfg)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to write config: {exc}")
-
-    updated = ModelConfig(
-        name=body.name,
-        temperature=body.temperature,
-        max_tokens=body.max_tokens,
-        use_for=use_for,
-    )
-
-    logger.info("Model role '%s' updated to '%s'", role.value, body.name)
-
+    updated = _model_config_from_yaml(llm[role])
     return ModelUpdateResponse(
-        role=role.value,
+        role=role,
         model=updated,
-        message=f"Model for '{role.value}' updated to '{body.name}'",
+        message=f"Updated {role} → {body.name}",
     )
 
 
 @router.get("/available", response_model=AvailableModelsResponse)
 async def get_available_models() -> AvailableModelsResponse:
-    """List models currently available on the local Ollama instance."""
+    """Proxy Ollama's /api/tags to list locally available models."""
+    cfg = _load_config()
+    base_url = cfg["llm"].get("base_url", "http://localhost:11434").rstrip("/")
+
     try:
-        cfg = _read_config()
-        base_url = cfg.get("llm", {}).get("base_url", "http://localhost:11434")
-        client = ollama.Client(host=base_url)
-        response = client.list()
-
-        models: list[OllamaModelInfo] = []
-        model_list = getattr(response, "models", None) or response.get("models", []) if isinstance(response, dict) else []
-
-        for m in model_list:
-            # Handle both object-style and dict-style responses
-            if hasattr(m, "model"):
-                name = m.model or getattr(m, "name", "")
-            elif isinstance(m, dict):
-                name = m.get("model", m.get("name", ""))
-            else:
-                name = str(m)
-
-            details = getattr(m, "details", None) or (m.get("details", {}) if isinstance(m, dict) else {})
-            if hasattr(details, "parameter_size"):
-                param_size = details.parameter_size or ""
-                quant = details.quantization_level or ""
-            elif isinstance(details, dict):
-                param_size = details.get("parameter_size", "")
-                quant = details.get("quantization_level", "")
-            else:
-                param_size = ""
-                quant = ""
-
-            size_val = getattr(m, "size", 0) if hasattr(m, "size") else (m.get("size", 0) if isinstance(m, dict) else 0)
-            modified = ""
-            if hasattr(m, "modified_at"):
-                modified = str(m.modified_at) if m.modified_at else ""
-            elif isinstance(m, dict):
-                modified = str(m.get("modified_at", ""))
-
-            models.append(OllamaModelInfo(
-                name=name,
-                size=_format_size(int(size_val) if size_val else 0),
-                parameter_size=param_size,
-                quantization=quant,
-                modified_at=modified,
-            ))
-
-        return AvailableModelsResponse(models=models)
-
-    except Exception as exc:
-        logger.error("Failed to list Ollama models: %s", exc)
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.get(f"{base_url}/api/tags")
+            resp.raise_for_status()
+            data = resp.json()
+    except httpx.ConnectError:
         raise HTTPException(
-            status_code=503,
-            detail=f"Cannot reach Ollama server: {exc}",
+            status_code=502,
+            detail=f"Cannot reach Ollama at {base_url} — is it running?",
         )
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=502, detail=f"Ollama error: {exc.response.text}")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    models: list[OllamaModelInfo] = []
+    for m in data.get("models", []):
+        details = m.get("details", {})
+        size_bytes = m.get("size", 0)
+        size_str = _fmt_bytes(size_bytes)
+        models.append(
+            OllamaModelInfo(
+                name=m.get("name", ""),
+                size=size_str,
+                parameter_size=details.get("parameter_size", ""),
+                quantization=details.get("quantization_level", ""),
+                modified_at=m.get("modified_at", ""),
+            )
+        )
+
+    return AvailableModelsResponse(models=models)
+
+
+def _fmt_bytes(n: int) -> str:
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024:
+            return f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} PB"

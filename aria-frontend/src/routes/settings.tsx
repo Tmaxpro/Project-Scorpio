@@ -1,11 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, RefreshCw, Server, Settings, Wifi, WifiOff } from "lucide-react";
-import { getModelsConfig } from "@/lib/api";
-import type { ModelRole, ModelsResponse } from "@/lib/types";
+import {
+  Loader2,
+  RefreshCw,
+  Server,
+  Settings,
+  WifiOff,
+  HardDrive,
+  Cpu,
+  ChevronRight,
+  Check,
+  AlertTriangle,
+  Thermometer,
+  Hash,
+  Layers,
+  Save,
+} from "lucide-react";
+import { getModelsConfig, getAvailableModels, updateModel } from "@/lib/api";
+import type { ModelRole, ModelsResponse, OllamaModelInfo, ModelConfig } from "@/lib/types";
 import { MODEL_ROLE_META } from "@/lib/types";
-import { ModelCard } from "@/components/settings/ModelCard";
-import { ModelEditModal } from "@/components/settings/ModelEditModal";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/settings")({
@@ -14,54 +27,166 @@ export const Route = createFileRoute("/settings")({
 
 const ROLE_ORDER: ModelRole[] = ["reasoning_model", "instruct_model", "fallback_model"];
 
+type DraftRole = {
+  name: string;
+  temperature: number;
+  max_tokens: number;
+  use_for: string[];
+};
+
+type SaveState = "idle" | "saving" | "saved" | "error";
+
+function shortName(n: string) {
+  return n.includes("/")
+    ? (n.split("/").pop() ?? n).replace(/-GGUF$/, "").replace(/[-_]Q\d.*$/, "")
+    : n;
+}
+
 function SettingsPage() {
   const [config, setConfig] = useState<ModelsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [editingRole, setEditingRole] = useState<ModelRole | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [available, setAvailable] = useState<OllamaModelInfo[]>([]);
 
-  const fetchConfig = async () => {
-    setLoading(true);
-    setError(null);
+  const [loadingConfig, setLoadingConfig] = useState(true);
+  const [loadingModels, setLoadingModels] = useState(true);
+  const [configError, setConfigError] = useState<string | null>(null);
+  const [ollamaError, setOllamaError] = useState<string | null>(null);
+
+  // Per-role draft state
+  const [drafts, setDrafts] = useState<Record<ModelRole, DraftRole>>({
+    reasoning_model: { name: "", temperature: 0.2, max_tokens: 2048, use_for: [] },
+    instruct_model: { name: "", temperature: 0.1, max_tokens: 1024, use_for: [] },
+    fallback_model: { name: "", temperature: 0.1, max_tokens: 2048, use_for: [] },
+  });
+
+  const [saveState, setSaveState] = useState<Record<ModelRole, SaveState>>({
+    reasoning_model: "idle",
+    instruct_model: "idle",
+    fallback_model: "idle",
+  });
+  const [saveErrors, setSaveErrors] = useState<Record<ModelRole, string>>({
+    reasoning_model: "",
+    instruct_model: "",
+    fallback_model: "",
+  });
+
+  const fetchConfig = useCallback(async () => {
+    setLoadingConfig(true);
+    setConfigError(null);
     try {
       const res = await getModelsConfig();
       setConfig(res);
+      setDrafts({
+        reasoning_model: { ...res.models.reasoning_model },
+        instruct_model: { ...res.models.instruct_model },
+        fallback_model: { ...res.models.fallback_model },
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load model configuration");
+      setConfigError(err instanceof Error ? err.message : "Failed to load model configuration");
     } finally {
-      setLoading(false);
+      setLoadingConfig(false);
     }
-  };
+  }, []);
+
+  const fetchModels = useCallback(async () => {
+    setLoadingModels(true);
+    setOllamaError(null);
+    try {
+      const res = await getAvailableModels();
+      setAvailable(res.models);
+    } catch (err) {
+      setOllamaError(err instanceof Error ? err.message : "Cannot reach Ollama");
+    } finally {
+      setLoadingModels(false);
+    }
+  }, []);
 
   useEffect(() => {
     fetchConfig();
-  }, [refreshKey]);
+    fetchModels();
+  }, [fetchConfig, fetchModels]);
 
-  const handleRefresh = () => setRefreshKey((k) => k + 1);
+  const handleSaveRole = async (role: ModelRole) => {
+    const draft = drafts[role];
+    setSaveState((s) => ({ ...s, [role]: "saving" }));
+    setSaveErrors((e) => ({ ...e, [role]: "" }));
+    try {
+      await updateModel(role, {
+        name: draft.name,
+        temperature: draft.temperature,
+        max_tokens: draft.max_tokens,
+      });
+      setSaveState((s) => ({ ...s, [role]: "saved" }));
+      window.dispatchEvent(new CustomEvent("aria:models-updated"));
+      setTimeout(() => {
+        setSaveState((s) => ({ ...s, [role]: "idle" }));
+        fetchConfig();
+      }, 1500);
+    } catch (err) {
+      setSaveErrors((e) => ({
+        ...e,
+        [role]: err instanceof Error ? err.message : "Save failed",
+      }));
+      setSaveState((s) => ({ ...s, [role]: "error" }));
+      setTimeout(() => setSaveState((s) => ({ ...s, [role]: "idle" })), 3000);
+    }
+  };
+
+  const isDirty = (role: ModelRole): boolean => {
+    if (!config) return false;
+    const orig = config.models[role];
+    const d = drafts[role];
+    return d.name !== orig.name || d.temperature !== orig.temperature || d.max_tokens !== orig.max_tokens;
+  };
+
+  // Which role is each available model currently assigned to?
+  const modelToRole = (name: string): ModelRole | null => {
+    if (!config) return null;
+    for (const role of ROLE_ORDER) {
+      if (config.models[role]?.name === name) return role;
+    }
+    return null;
+  };
+
+  const loading = loadingConfig || loadingModels;
+
+  const colorMap: Record<string, { border: string; badge: string; dot: string }> = {
+    cyan: {
+      border: "border-cyan/40",
+      badge: "bg-cyan/15 text-cyan",
+      dot: "bg-cyan",
+    },
+    violet: {
+      border: "border-violet/40",
+      badge: "bg-violet/15 text-violet",
+      dot: "bg-violet",
+    },
+    warning: {
+      border: "border-warning/40",
+      badge: "bg-warning/15 text-warning",
+      dot: "bg-warning",
+    },
+  };
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
       {/* Page Header */}
       <div className="mb-8 flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary glow-cyan">
-              <Settings className="h-5 w-5" />
-            </div>
-            <div>
-              <h1 className="font-mono text-xl font-bold tracking-tight text-foreground">
-                Model Configuration
-              </h1>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                Manage the LLM models assigned to each pipeline role
-              </p>
-            </div>
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary glow-cyan">
+            <Settings className="h-5 w-5" />
+          </div>
+          <div>
+            <h1 className="font-mono text-xl font-bold tracking-tight text-foreground">
+              Model Configuration
+            </h1>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              See your Ollama models and assign them to ARIA pipeline roles
+            </p>
           </div>
         </div>
         <button
           type="button"
-          onClick={handleRefresh}
+          onClick={() => { fetchConfig(); fetchModels(); }}
           disabled={loading}
           className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground disabled:opacity-50"
         >
@@ -70,137 +195,366 @@ function SettingsPage() {
         </button>
       </div>
 
-      {/* Provider Info Banner */}
-      {config && !loading && (
-        <div className="mb-6 flex flex-wrap items-center gap-4 rounded-lg border border-border bg-card/50 px-4 py-3">
-          <div className="flex items-center gap-2 text-sm">
+      {/* Provider Banner */}
+      {config && (
+        <div className="mb-8 flex flex-wrap items-center gap-4 rounded-lg border border-border bg-card/50 px-4 py-3">
+          <div className="flex items-center gap-2">
             <Server className="h-4 w-4 text-muted-foreground" />
-            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-              Provider
-            </span>
-            <span className="font-mono text-xs font-medium text-foreground">
-              {config.provider}
-            </span>
+            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Provider</span>
+            <span className="font-mono text-xs font-medium text-foreground">{config.provider}</span>
           </div>
           <div className="h-4 w-px bg-border" />
-          <div className="flex items-center gap-2 text-sm">
-            <Wifi className="h-4 w-4 text-muted-foreground" />
-            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-              Endpoint
-            </span>
-            <span className="font-mono text-xs text-foreground">
-              {config.base_url}
-            </span>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Endpoint</span>
+            <span className="font-mono text-xs text-foreground">{config.base_url}</span>
           </div>
           <div className="h-4 w-px bg-border" />
-          <div className="flex items-center gap-2 text-sm">
+          <div className="flex items-center gap-2">
             <RefreshCw className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-              Max Retries
-            </span>
-            <span className="font-mono text-xs font-medium text-foreground">
-              {config.max_retries}
-            </span>
+            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Max Retries</span>
+            <span className="font-mono text-xs font-medium text-foreground">{config.max_retries}</span>
           </div>
         </div>
       )}
 
-      {/* Loading State */}
-      {loading && (
-        <div className="flex flex-col items-center justify-center py-24">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="mt-4 font-mono text-xs uppercase tracking-widest text-muted-foreground">
-            Loading configuration...
-          </p>
-        </div>
-      )}
-
-      {/* Error State */}
-      {error && !loading && (
-        <div className="flex flex-col items-center justify-center py-24">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-danger/10">
-            <WifiOff className="h-7 w-7 text-danger" />
-          </div>
-          <p className="mt-4 font-mono text-sm text-danger">{error}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Make sure the ARIA backend is running at the expected address
-          </p>
+      {/* Error States */}
+      {configError && (
+        <div className="mb-6 flex flex-col items-center rounded-lg border border-danger/40 bg-danger/10 py-10">
+          <WifiOff className="h-8 w-8 text-danger" />
+          <p className="mt-3 font-mono text-sm text-danger">{configError}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Make sure the ARIA backend is running</p>
           <button
             type="button"
-            onClick={handleRefresh}
-            className="mt-4 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 font-mono text-[10px] uppercase tracking-widest text-primary-foreground transition-colors hover:opacity-90"
+            onClick={fetchConfig}
+            className="mt-4 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 font-mono text-[10px] uppercase tracking-widest text-primary-foreground hover:opacity-90"
           >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Retry
+            <RefreshCw className="h-3.5 w-3.5" /> Retry
           </button>
         </div>
       )}
 
-      {/* Model Cards Grid */}
-      {config && !loading && !error && (
-        <div className="grid gap-5 md:grid-cols-3">
-          {ROLE_ORDER.map((role) => {
-            const model = config.models[role];
-            if (!model) return null;
-            return (
-              <ModelCard
-                key={role}
-                role={role}
-                model={model}
-                onEdit={() => setEditingRole(role)}
-              />
-            );
-          })}
-        </div>
-      )}
-
-      {/* Architecture Diagram */}
-      {config && !loading && !error && (
-        <div className="mt-8 rounded-lg border border-border bg-card/30 p-5">
-          <div className="mb-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-            Pipeline Model Assignment
+      {/* ── SECTION 1: Available Ollama models ───────────────────────────── */}
+      <section className="mb-10">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="font-mono text-sm font-semibold uppercase tracking-widest text-foreground">
+              Available Ollama Models
+            </h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              All models currently pulled on this machine
+            </p>
           </div>
-          <div className="flex flex-col gap-2 font-mono text-xs">
-            {ROLE_ORDER.map((role) => {
-              const model = config.models[role];
-              const meta = MODEL_ROLE_META[role];
-              if (!model) return null;
-              const dotColor: Record<string, string> = {
-                cyan: "bg-cyan",
-                violet: "bg-violet",
-                warning: "bg-warning",
-              };
+          {!loadingModels && (
+            <span className="rounded-full border border-border bg-card px-2.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+              {available.length} model{available.length !== 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
+
+        {loadingModels && (
+          <div className="flex items-center gap-3 rounded-lg border border-border bg-card/30 px-5 py-8 text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="font-mono text-xs">Querying Ollama…</span>
+          </div>
+        )}
+
+        {ollamaError && !loadingModels && (
+          <div className="flex items-center gap-3 rounded-lg border border-warning/40 bg-warning/10 px-5 py-4">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
+            <div>
+              <p className="font-mono text-xs text-warning">{ollamaError}</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                You can still type model names manually in the role configuration below
+              </p>
+            </div>
+          </div>
+        )}
+
+        {!loadingModels && !ollamaError && available.length === 0 && (
+          <div className="rounded-lg border border-border bg-card/30 px-5 py-10 text-center">
+            <HardDrive className="mx-auto h-8 w-8 text-muted-foreground/40" />
+            <p className="mt-3 font-mono text-xs text-muted-foreground">No models found</p>
+            <p className="mt-1 text-[11px] text-muted-foreground/60">
+              Run <code className="rounded bg-card px-1 py-0.5">ollama pull &lt;model&gt;</code> to add models
+            </p>
+          </div>
+        )}
+
+        {!loadingModels && available.length > 0 && (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {available.map((m) => {
+              const assignedRole = modelToRole(m.name);
+              const meta = assignedRole ? MODEL_ROLE_META[assignedRole] : null;
               return (
-                <div key={role} className="flex items-center gap-3">
-                  <span className={cn("h-2 w-2 shrink-0 rounded-full", dotColor[meta.color])} />
-                  <span className="w-24 text-muted-foreground">{meta.label}</span>
-                  <span className="text-muted-foreground/40">→</span>
-                  <span className="flex-1 text-foreground/80">
-                    {model.use_for.length > 0
-                      ? model.use_for.join(", ")
-                      : "fallback recovery"}
-                  </span>
-                  <span className="text-muted-foreground/40">→</span>
-                  <span className="max-w-[200px] truncate text-foreground" title={model.name}>
-                    {model.name.includes("/")
-                      ? model.name.split("/").pop()
-                      : model.name}
-                  </span>
+                <div
+                  key={m.name}
+                  className={cn(
+                    "glass flex flex-col gap-3 rounded-lg p-4 transition-colors",
+                    assignedRole
+                      ? colorMap[meta!.color].border
+                      : "border-border hover:border-border/80",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <HardDrive className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <span
+                        className="truncate font-mono text-sm font-medium text-foreground"
+                        title={m.name}
+                      >
+                        {shortName(m.name)}
+                      </span>
+                    </div>
+                    {assignedRole && meta && (
+                      <span
+                        className={cn(
+                          "shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-widest",
+                          colorMap[meta.color].badge,
+                        )}
+                      >
+                        <span className={cn("h-1.5 w-1.5 rounded-full", colorMap[meta.color].dot)} />
+                        {meta.label}
+                      </span>
+                    )}
+                  </div>
+
+                  {m.name !== shortName(m.name) && (
+                    <span className="truncate font-mono text-[10px] text-muted-foreground/50" title={m.name}>
+                      {m.name}
+                    </span>
+                  )}
+
+                  <div className="flex flex-wrap gap-2">
+                    {m.parameter_size && (
+                      <span className="rounded border border-border bg-card px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+                        {m.parameter_size}
+                      </span>
+                    )}
+                    {m.quantization && (
+                      <span className="rounded border border-border bg-card px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+                        {m.quantization}
+                      </span>
+                    )}
+                    {m.size && (
+                      <span className="rounded border border-border bg-card px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+                        {m.size}
+                      </span>
+                    )}
+                  </div>
                 </div>
               );
             })}
           </div>
-        </div>
-      )}
+        )}
+      </section>
 
-      {/* Edit Modal */}
-      {editingRole && config?.models[editingRole] && (
-        <ModelEditModal
-          role={editingRole}
-          current={config.models[editingRole]}
-          onClose={() => setEditingRole(null)}
-          onSaved={handleRefresh}
-        />
+      {/* ── SECTION 2: Role assignment ────────────────────────────────────── */}
+      {config && !configError && (
+        <section>
+          <div className="mb-4">
+            <h2 className="font-mono text-sm font-semibold uppercase tracking-widest text-foreground">
+              Role Assignment
+            </h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Choose which model handles each ARIA pipeline role
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-5">
+            {ROLE_ORDER.map((role) => {
+              const meta = MODEL_ROLE_META[role];
+              const draft = drafts[role];
+              const dirty = isDirty(role);
+              const ss = saveState[role];
+              const colors = colorMap[meta.color];
+
+              return (
+                <div
+                  key={role}
+                  className={cn(
+                    "glass rounded-xl border p-5 transition-colors",
+                    colors.border,
+                  )}
+                >
+                  {/* Role header */}
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", colors.badge)}>
+                      <Cpu className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-widest",
+                            colors.badge,
+                          )}
+                        >
+                          <span className={cn("h-1.5 w-1.5 rounded-full", colors.dot)} />
+                          {meta.label}
+                        </span>
+                        {dirty && (
+                          <span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 font-mono text-[9px] text-warning">
+                            unsaved changes
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">{meta.description}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
+                    {/* Left: model picker + sliders */}
+                    <div className="space-y-4">
+                      {/* Model select */}
+                      <div className="space-y-1.5">
+                        <label className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                          <HardDrive className="h-3 w-3" />
+                          Model
+                        </label>
+                        {!loadingModels && available.length > 0 ? (
+                          <select
+                            value={draft.name}
+                            onChange={(e) =>
+                              setDrafts((d) => ({ ...d, [role]: { ...d[role], name: e.target.value } }))
+                            }
+                            className="w-full cursor-pointer rounded-md border border-border bg-[oklch(0.12_0.02_260)] px-3 py-2 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary"
+                          >
+                            {/* Keep current value in list even if not in Ollama */}
+                            {!available.some((m) => m.name === draft.name) && (
+                              <option value={draft.name}>{draft.name} (current)</option>
+                            )}
+                            {available.map((m) => (
+                              <option key={m.name} value={m.name}>
+                                {m.name}
+                                {m.parameter_size ? ` — ${m.parameter_size}` : ""}
+                                {m.quantization ? ` ${m.quantization}` : ""}
+                                {m.size ? ` (${m.size})` : ""}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            value={draft.name}
+                            onChange={(e) =>
+                              setDrafts((d) => ({ ...d, [role]: { ...d[role], name: e.target.value } }))
+                            }
+                            placeholder="model name (e.g. qwen2.5:7b)"
+                            className="w-full rounded-md border border-border bg-[oklch(0.12_0.02_260)] px-3 py-2 font-mono text-sm text-foreground outline-none placeholder:text-muted-foreground/40 focus:border-primary"
+                          />
+                        )}
+                      </div>
+
+                      {/* Temperature + Max Tokens inline */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="flex items-center justify-between">
+                            <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                              <Thermometer className="h-3 w-3" />
+                              Temp
+                            </span>
+                            <span className="font-mono text-xs tabular-nums text-foreground">
+                              {draft.temperature.toFixed(2)}
+                            </span>
+                          </label>
+                          <input
+                            type="range"
+                            min="0"
+                            max="2"
+                            step="0.05"
+                            value={draft.temperature}
+                            onChange={(e) =>
+                              setDrafts((d) => ({
+                                ...d,
+                                [role]: { ...d[role], temperature: parseFloat(e.target.value) },
+                              }))
+                            }
+                            className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-border outline-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-md"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="flex items-center justify-between">
+                            <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                              <Hash className="h-3 w-3" />
+                              Tokens
+                            </span>
+                            <span className="font-mono text-xs tabular-nums text-foreground">
+                              {draft.max_tokens.toLocaleString()}
+                            </span>
+                          </label>
+                          <input
+                            type="range"
+                            min="128"
+                            max="16384"
+                            step="128"
+                            value={draft.max_tokens}
+                            onChange={(e) =>
+                              setDrafts((d) => ({
+                                ...d,
+                                [role]: { ...d[role], max_tokens: parseInt(e.target.value) },
+                              }))
+                            }
+                            className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-border outline-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-md"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Use-for tags */}
+                      {draft.use_for.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Layers className="h-3 w-3 text-muted-foreground" />
+                          {draft.use_for.map((u) => (
+                            <span
+                              key={u}
+                              className="rounded-full border border-border bg-card px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground"
+                            >
+                              {u}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Save error */}
+                      {ss === "error" && saveErrors[role] && (
+                        <div className="flex items-center gap-2 rounded-md border border-danger/40 bg-danger/10 px-3 py-2 font-mono text-[11px] text-danger">
+                          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                          {saveErrors[role]}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Right: Save button */}
+                    <div className="flex items-end">
+                      <button
+                        type="button"
+                        onClick={() => handleSaveRole(role)}
+                        disabled={!dirty || ss === "saving" || ss === "saved"}
+                        className={cn(
+                          "inline-flex h-10 items-center gap-2 rounded-md px-4 font-mono text-[10px] uppercase tracking-widest transition-all",
+                          dirty && ss === "idle"
+                            ? "bg-primary text-primary-foreground hover:opacity-90 glow-cyan"
+                            : ss === "saved"
+                              ? "bg-success/20 text-success cursor-default"
+                              : ss === "error"
+                                ? "border border-danger/40 bg-danger/10 text-danger cursor-default"
+                                : "cursor-not-allowed border border-border bg-card text-muted-foreground",
+                        )}
+                      >
+                        {ss === "saving" ? (
+                          <><Loader2 className="h-3.5 w-3.5 animate-spin" />Saving…</>
+                        ) : ss === "saved" ? (
+                          <><Check className="h-3.5 w-3.5" />Saved</>
+                        ) : (
+                          <><Save className="h-3.5 w-3.5" />Apply</>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       )}
     </div>
   );
