@@ -8,16 +8,18 @@ import {
   WifiOff,
   HardDrive,
   Cpu,
-  ChevronRight,
   Check,
   AlertTriangle,
   Thermometer,
   Hash,
   Layers,
   Save,
+  Zap,
+  ZapOff,
+  MemoryStick,
 } from "lucide-react";
-import { getModelsConfig, getAvailableModels, updateModel } from "@/lib/api";
-import type { ModelRole, ModelsResponse, OllamaModelInfo, ModelConfig } from "@/lib/types";
+import { getModelsConfig, getAvailableModels, updateModel, getRunningModels, unloadModel } from "@/lib/api";
+import type { ModelRole, ModelsResponse, OllamaModelInfo, RunningModelInfo } from "@/lib/types";
 import { MODEL_ROLE_META } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -45,11 +47,13 @@ function shortName(n: string) {
 function SettingsPage() {
   const [config, setConfig] = useState<ModelsResponse | null>(null);
   const [available, setAvailable] = useState<OllamaModelInfo[]>([]);
+  const [running, setRunning] = useState<RunningModelInfo[]>([]);
 
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [loadingModels, setLoadingModels] = useState(true);
   const [configError, setConfigError] = useState<string | null>(null);
   const [ollamaError, setOllamaError] = useState<string | null>(null);
+  const [unloading, setUnloading] = useState<string | null>(null);
 
   // Per-role draft state
   const [drafts, setDrafts] = useState<Record<ModelRole, DraftRole>>({
@@ -91,14 +95,27 @@ function SettingsPage() {
     setLoadingModels(true);
     setOllamaError(null);
     try {
-      const res = await getAvailableModels();
-      setAvailable(res.models);
-    } catch (err) {
-      setOllamaError(err instanceof Error ? err.message : "Cannot reach Ollama");
+      const [availRes, runRes] = await Promise.allSettled([
+        getAvailableModels(),
+        getRunningModels(),
+      ]);
+      if (availRes.status === "fulfilled") setAvailable(availRes.value.models);
+      else setOllamaError(availRes.reason instanceof Error ? availRes.reason.message : "Cannot reach Ollama");
+      if (runRes.status === "fulfilled") setRunning(runRes.value.models);
     } finally {
       setLoadingModels(false);
     }
   }, []);
+
+  const handleUnload = async (name: string) => {
+    setUnloading(name);
+    try {
+      await unloadModel(name);
+      await fetchModels();
+    } finally {
+      setUnloading(null);
+    }
+  };
 
   useEffect(() => {
     fetchConfig();
@@ -146,6 +163,9 @@ function SettingsPage() {
     }
     return null;
   };
+
+  const runningInfo = (name: string): RunningModelInfo | null =>
+    running.find((r) => r.name === name || r.name.startsWith(name.split(":")[0])) ?? null;
 
   const loading = loadingConfig || loadingModels;
 
@@ -245,9 +265,17 @@ function SettingsPage() {
             </p>
           </div>
           {!loadingModels && (
-            <span className="rounded-full border border-border bg-card px-2.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-              {available.length} model{available.length !== 1 ? "s" : ""}
-            </span>
+            <div className="flex items-center gap-2">
+              {running.length > 0 && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-2.5 py-0.5 font-mono text-[10px] text-success">
+                  <Zap className="h-3 w-3" />
+                  {running.length} in VRAM
+                </span>
+              )}
+              <span className="rounded-full border border-border bg-card px-2.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                {available.length} pulled
+              </span>
+            </div>
           )}
         </div>
 
@@ -285,37 +313,50 @@ function SettingsPage() {
             {available.map((m) => {
               const assignedRole = modelToRole(m.name);
               const meta = assignedRole ? MODEL_ROLE_META[assignedRole] : null;
+              const ri = runningInfo(m.name);
+              const isUnloading = unloading === m.name;
               return (
                 <div
                   key={m.name}
                   className={cn(
                     "glass flex flex-col gap-3 rounded-lg p-4 transition-colors",
-                    assignedRole
-                      ? colorMap[meta!.color].border
-                      : "border-border hover:border-border/80",
+                    ri
+                      ? "border-success/40"
+                      : assignedRole
+                        ? colorMap[meta!.color].border
+                        : "border-border hover:border-border/80",
                   )}
                 >
+                  {/* Name row */}
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
-                      <HardDrive className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <span
-                        className="truncate font-mono text-sm font-medium text-foreground"
-                        title={m.name}
-                      >
+                      {ri
+                        ? <Zap className="h-4 w-4 shrink-0 text-success" />
+                        : <HardDrive className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      }
+                      <span className="truncate font-mono text-sm font-medium text-foreground" title={m.name}>
                         {shortName(m.name)}
                       </span>
                     </div>
-                    {assignedRole && meta && (
-                      <span
-                        className={cn(
-                          "shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-widest",
-                          colorMap[meta.color].badge,
-                        )}
-                      >
-                        <span className={cn("h-1.5 w-1.5 rounded-full", colorMap[meta.color].dot)} />
-                        {meta.label}
-                      </span>
-                    )}
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {ri && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-widest text-success">
+                          <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+                          in VRAM
+                        </span>
+                      )}
+                      {assignedRole && meta && (
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-widest",
+                            colorMap[meta.color].badge,
+                          )}
+                        >
+                          <span className={cn("h-1.5 w-1.5 rounded-full", colorMap[meta.color].dot)} />
+                          {meta.label}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {m.name !== shortName(m.name) && (
@@ -324,6 +365,7 @@ function SettingsPage() {
                     </span>
                   )}
 
+                  {/* Tags */}
                   <div className="flex flex-wrap gap-2">
                     {m.parameter_size && (
                       <span className="rounded border border-border bg-card px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
@@ -340,7 +382,28 @@ function SettingsPage() {
                         {m.size}
                       </span>
                     )}
+                    {ri && (
+                      <span className="inline-flex items-center gap-1 rounded border border-success/30 bg-success/10 px-2 py-0.5 font-mono text-[10px] text-success">
+                        <MemoryStick className="h-3 w-3" />
+                        {ri.size_vram} VRAM
+                      </span>
+                    )}
                   </div>
+
+                  {/* Unload button — only when model is in VRAM */}
+                  {ri && (
+                    <button
+                      type="button"
+                      onClick={() => handleUnload(m.name)}
+                      disabled={isUnloading}
+                      className="mt-auto inline-flex items-center justify-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-warning transition-colors hover:bg-warning/20 disabled:opacity-50"
+                    >
+                      {isUnloading
+                        ? <><Loader2 className="h-3 w-3 animate-spin" />Unloading…</>
+                        : <><ZapOff className="h-3 w-3" />Unload from VRAM</>
+                      }
+                    </button>
+                  )}
                 </div>
               );
             })}

@@ -16,6 +16,10 @@ from app.schemas.models import (
     ModelUpdateResponse,
     ModelsResponse,
     OllamaModelInfo,
+    RunningModelInfo,
+    RunningModelsResponse,
+    UnloadRequest,
+    UnloadResponse,
 )
 
 router = APIRouter(prefix="/api/models", tags=["models"])
@@ -120,6 +124,59 @@ async def get_available_models() -> AvailableModelsResponse:
         )
 
     return AvailableModelsResponse(models=models)
+
+
+@router.get("/running", response_model=RunningModelsResponse)
+async def get_running_models() -> RunningModelsResponse:
+    """Proxy Ollama's /api/ps — models currently loaded in VRAM."""
+    cfg = _load_config()
+    base_url = cfg["llm"].get("base_url", "http://localhost:11434").rstrip("/")
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{base_url}/api/ps")
+            resp.raise_for_status()
+            data = resp.json()
+    except httpx.ConnectError:
+        raise HTTPException(status_code=502, detail=f"Cannot reach Ollama at {base_url}")
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=502, detail=f"Ollama error: {exc.response.text}")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    models: list[RunningModelInfo] = []
+    for m in data.get("models", []):
+        models.append(
+            RunningModelInfo(
+                name=m.get("name", ""),
+                size_vram=_fmt_bytes(m.get("size_vram", 0)),
+                expires_at=m.get("expires_at", ""),
+            )
+        )
+    return RunningModelsResponse(models=models)
+
+
+@router.post("/unload", response_model=UnloadResponse)
+async def unload_model(body: UnloadRequest) -> UnloadResponse:
+    """Tell Ollama to evict a model from VRAM immediately (keep_alive=0)."""
+    cfg = _load_config()
+    base_url = cfg["llm"].get("base_url", "http://localhost:11434").rstrip("/")
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                f"{base_url}/api/generate",
+                json={"model": body.name, "keep_alive": 0},
+            )
+            resp.raise_for_status()
+    except httpx.ConnectError:
+        raise HTTPException(status_code=502, detail=f"Cannot reach Ollama at {base_url}")
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=502, detail=f"Ollama error: {exc.response.text}")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    return UnloadResponse(name=body.name, message=f"Model '{body.name}' unloaded from VRAM")
 
 
 def _fmt_bytes(n: int) -> str:

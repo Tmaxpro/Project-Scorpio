@@ -44,3 +44,22 @@ class OllamaModelInfo(BaseModel):
 
 class AvailableModelsResponse(BaseModel):
     models: list[OllamaModelInfo]
+
+
+class RunningModelInfo(BaseModel):
+    name: str
+    size_vram: str
+    expires_at: str
+
+
+class RunningModelsResponse(BaseModel):
+    models: list[RunningModelInfo]
+
+
+class UnloadRequest(BaseModel):
+    name: str
+
+
+class UnloadResponse(BaseModel):
+    name: str
+    message: str

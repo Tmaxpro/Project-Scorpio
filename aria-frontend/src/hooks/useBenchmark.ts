@@ -223,6 +223,7 @@ export function useBenchmarkRun(runId: string): UseBenchmarkRunResult {
 
         const completed: BenchmarkRun = {
           ...localRun,
+          scan_id: localRun.scan_id || meta.scan_id,
           status: "completed",
           results: [result],
           summary,

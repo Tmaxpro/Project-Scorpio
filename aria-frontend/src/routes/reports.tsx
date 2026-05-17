@@ -7,7 +7,6 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { TopBar } from "@/components/layout/TopBar";
 import { Button } from "@/components/ui/button";
 import { downloadReport, getAllScans } from "@/lib/api";
-import { mockScanHistory } from "@/lib/mock";
 import type { ScanResult } from "@/lib/types";
 import { toast } from "sonner";
 
@@ -17,7 +16,6 @@ export const Route = createFileRoute("/reports")({
 
 function ReportsPage() {
   const [scans, setScans] = useState<ScanResult[]>([]);
-  const [isMock, setIsMock] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -26,15 +24,9 @@ function ReportsPage() {
     (async () => {
       try {
         const data = await getAllScans();
-        if (!cancelled) {
-          setScans(data.filter((s) => s.status === "completed"));
-          setIsMock(false);
-        }
+        if (!cancelled) setScans(data.filter((s) => s.status === "completed"));
       } catch {
-        if (!cancelled) {
-          setScans(mockScanHistory.filter((s) => s.status === "completed"));
-          setIsMock(true);
-        }
+        /* backend unreachable — leave scans empty */
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -71,13 +63,6 @@ function ReportsPage() {
       <TopBar
         title="Reports"
         subtitle="Download HTML or Markdown reports for completed scans"
-        actions={
-          isMock && (
-            <span className="rounded border border-warning/40 bg-warning/10 px-2 py-0.5 font-mono text-[10px] text-warning">
-              MOCK
-            </span>
-          )
-        }
       />
       <PageContainer>
         {loading ? (
@@ -122,24 +107,24 @@ function ReportsPage() {
                   <div>
                     <div className="text-muted-foreground">Findings</div>
                     <div className="text-warning tabular-nums">
-                      {s.summary.findings_count}
+                      {s.summary?.findings_count ?? "—"}
                     </div>
                   </div>
                   <div>
                     <div className="text-muted-foreground">Endpoints</div>
                     <div className="tabular-nums text-foreground">
-                      {s.summary.total_endpoints}
+                      {s.summary?.total_endpoints ?? "—"}
                     </div>
                   </div>
                   <div>
                     <div className="text-muted-foreground">Tasks</div>
                     <div className="tabular-nums text-foreground">
-                      {s.summary.completed_tasks}
+                      {s.summary?.completed_tasks ?? "—"}
                     </div>
                   </div>
                 </div>
                 <div className="text-[10px] text-muted-foreground">
-                  {new Date(s.timestamp).toLocaleString()}
+                  {s.timestamp ? new Date(s.timestamp).toLocaleString() : "—"}
                 </div>
                 <div className="flex gap-2">
                   <Button

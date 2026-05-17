@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
@@ -54,7 +55,11 @@ class HTTPEngineClient:
         self._rate_controller = rate_controller
         self._timeout = timeout_s
 
-    async def send(self, request: PayloadRequest) -> ScanResult:
+    async def send(
+        self,
+        request: PayloadRequest,
+        on_result: Callable[[ScanResult], Awaitable[None]] | None = None,
+    ) -> ScanResult:
         """Execute one PayloadRequest and return a ScanResult."""
         url = f"{self._base_url}{request.path}"
         host = urlparse(url).netloc
@@ -76,7 +81,8 @@ class HTTPEngineClient:
                     params=params,
                 )
             elapsed_ms = (time.monotonic() - start) * 1000
-            return ScanResult(
+            logger.info("→ %s %s  %d  %.0fms", request.method, url, response.status_code, elapsed_ms)
+            result = ScanResult(
                 task_id=request.task_id,
                 request=request,
                 status_code=response.status_code,
@@ -86,8 +92,8 @@ class HTTPEngineClient:
             )
         except Exception as exc:  # noqa: BLE001
             elapsed_ms = (time.monotonic() - start) * 1000
-            logger.debug("HTTP error for %s %s: %s", request.method, url, exc)
-            return ScanResult(
+            logger.info("→ %s %s  ERR  %.0fms  (%s)", request.method, url, elapsed_ms, exc)
+            result = ScanResult(
                 task_id=request.task_id,
                 request=request,
                 status_code=0,
@@ -97,6 +103,14 @@ class HTTPEngineClient:
                 error=str(exc),
             )
 
-    async def send_batch(self, requests: list[PayloadRequest]) -> list[ScanResult]:
+        if on_result:
+            await on_result(result)
+        return result
+
+    async def send_batch(
+        self,
+        requests: list[PayloadRequest],
+        on_result: Callable[[ScanResult], Awaitable[None]] | None = None,
+    ) -> list[ScanResult]:
         """Send all requests concurrently; rate limiter serialises per-host."""
-        return list(await asyncio.gather(*[self.send(req) for req in requests]))
+        return list(await asyncio.gather(*[self.send(req, on_result) for req in requests]))

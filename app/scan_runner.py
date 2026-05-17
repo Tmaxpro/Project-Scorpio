@@ -9,6 +9,7 @@ from core.agents.auth_agent import AuthAgent
 from core.agents.bola_agent import BOLAAgent
 from core.agents.injection_agent import InjectionAgent
 from core.agents.mass_assign_agent import MassAssignAgent
+from core.agents.property_auth_agent import PropertyAuthAgent
 from core.agents.rate_limit_agent import RateLimitAgent
 from core.coordinator.coordinator import Coordinator
 from core.coordinator.dispatcher import Dispatcher
@@ -87,26 +88,33 @@ class ScanRunner:
             if event_cb:
                 await event_cb(event_type, data)
 
-        def _p(progress: float, msg: str) -> None:
+        async def _p(progress: float, msg: str) -> None:
             logger.info("[%s] %.0f%% — %s", scan_id or "scan", progress * 100, msg)
             if progress_cb:
                 progress_cb(progress, msg)
+            await _emit("pipeline_phase", {"progress": progress, "message": msg})
 
         # ── 1. Parse + enrich ─────────────────────────────────────────────── #
-        _p(0.05, "Parsing OpenAPI spec...")
+        await _p(0.05, "Parsing OpenAPI spec...")
         parser = OpenAPIParser()
         parser.parse(spec)
         enriched = OpenAPIEnricher().enrich(parser.get_endpoints())
-        _p(0.10, f"Enriched {len(enriched)} endpoints")
+        await _p(0.10, f"Enriched {len(enriched)} endpoints")
 
         # ── 2. Knowledge base ─────────────────────────────────────────────── #
-        _p(0.15, "Loading knowledge base...")
-        owasp_rag = OWASPRag(persist_dir=self._chroma_dir)
-        owasp_rag.index_documents(self._docs_dir)
+        await _p(0.15, "Loading knowledge base...")
+        from app import state
+        if state.owasp_rag is not None:
+            owasp_rag = state.owasp_rag
+        else:
+            # Fallback: lifespan didn't run (e.g. tests) — create and cache on first scan
+            owasp_rag = OWASPRag(persist_dir=self._chroma_dir)
+            owasp_rag.index_documents(self._docs_dir)
+            state.owasp_rag = owasp_rag
         nuclei_adapter = NucleiPayloadAdapter(NucleiIndex(self._templates_dir))
 
         # ── 3. Plan tasks (Coordinator) ───────────────────────────────────── #
-        _p(0.20, "Planning tasks with coordinator...")
+        await _p(0.20, "Planning tasks with coordinator...")
         from core.llm.client import LLMClient
         llm = LLMClient(config_path=self._config_path, scan_id=scan_id)
         coordinator = Coordinator(llm=llm, rag=owasp_rag)
@@ -115,7 +123,7 @@ class ScanRunner:
             context=context or "Automated ARIA scan",
             owasp_filter=owasp_filter or [],
         )
-        _p(0.30, f"Planned {len(tasks)} tasks")
+        await _p(0.30, f"Planned {len(tasks)} tasks")
 
         task_map = {t.task_id: t for t in tasks}
 
@@ -131,10 +139,11 @@ class ScanRunner:
             })
 
         # ── 4. Agent decisions (Dispatcher) ──────────────────────────────── #
-        _p(0.35, "Running attack agents...")
+        await _p(0.35, "Running attack agents...")
         agents = {
             "API1": BOLAAgent(llm, owasp_rag),
             "API2": AuthAgent(llm, owasp_rag),
+            "API3": PropertyAuthAgent(llm, owasp_rag),
             "API4": RateLimitAgent(llm, owasp_rag),
             "API5": AuthAgent(llm, owasp_rag),
             "API6": MassAssignAgent(llm, owasp_rag),
@@ -144,10 +153,10 @@ class ScanRunner:
         decisions = await Dispatcher(agents=agents, max_concurrent=3).dispatch(
             tasks, enriched
         )
-        _p(0.50, f"Got {len(decisions)} agent decisions")
+        await _p(0.50, f"Got {len(decisions)} agent decisions")
 
         # ── 5. Build payloads ─────────────────────────────────────────────── #
-        _p(0.55, "Building payloads...")
+        await _p(0.55, "Building payloads...")
         factory = PayloadFactory(nuclei_adapter)
         all_requests = []
         for decision in decisions:
@@ -162,26 +171,37 @@ class ScanRunner:
             all_requests.extend(
                 factory.build(task, decision, endpoint)[:max_payloads_per_endpoint]
             )
-        _p(0.60, f"Built {len(all_requests)} payload requests")
+        await _p(0.60, f"Built {len(all_requests)} payload requests")
 
         # ── 6. HTTP execution ─────────────────────────────────────────────── #
-        _p(0.65, f"Sending {len(all_requests)} requests to {target_url}...")
+        await _p(0.65, f"Sending {len(all_requests)} requests to {target_url}...")
         auth_cfg = _build_auth_config(
             auth_type=auth_type,
             auth_token=auth_token,
             auth_header_name=auth_header_name,
         )
+
+        async def _on_http_result(r: Any) -> None:
+            status = r.status_code if not r.error else "ERR"
+            await _emit("http_request", {
+                "method": r.request.method,
+                "path": r.request.path,
+                "status": status,
+                "ms": round(r.response_time_ms),
+                "error": r.error,
+            })
+
         http_client = HTTPEngineClient(
             base_url=target_url,
             auth_injector=AuthInjector(auth_cfg),
             rate_controller=RateController(requests_per_second=10.0),
             timeout_s=10.0,
         )
-        scan_results = await http_client.send_batch(all_requests)
-        _p(0.85, f"Received {len(scan_results)} responses")
+        scan_results = await http_client.send_batch(all_requests, on_result=_on_http_result)
+        await _p(0.85, f"Received {len(scan_results)} responses")
 
         # ── 7. Validate ───────────────────────────────────────────────────── #
-        _p(0.90, "Validating findings...")
+        await _p(0.90, "Validating findings...")
         rule_validator = RuleValidator()
         validation_results: list[ValidationResult] = []
         total = len(scan_results)
@@ -224,7 +244,7 @@ class ScanRunner:
                                 "finding": _vr_to_task_result(first_vr, task),
                             })
 
-        _p(1.0, "Done")
+        await _p(1.0, "Done")
         return validation_results
 
 

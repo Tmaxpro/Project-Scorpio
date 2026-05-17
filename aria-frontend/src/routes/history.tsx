@@ -7,7 +7,6 @@ import { TopBar } from "@/components/layout/TopBar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { getAllScans } from "@/lib/api";
-import { mockScanHistory } from "@/lib/mock";
 import type { ScanResult, ScanStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +23,7 @@ const STATUS_FILTERS: { value: "all" | ScanStatus; label: string }[] = [
 ];
 
 const STATUS_CHIP: Record<ScanStatus, string> = {
+  pending: "border-border bg-muted text-muted-foreground",
   running: "border-cyan/40 bg-cyan/10 text-cyan",
   completed: "border-success/40 bg-success/10 text-success",
   failed: "border-[var(--sev-critical)]/40 bg-[var(--sev-critical)]/10 text-[var(--sev-critical)]",
@@ -32,7 +32,6 @@ const STATUS_CHIP: Record<ScanStatus, string> = {
 
 function HistoryPage() {
   const [scans, setScans] = useState<ScanResult[]>([]);
-  const [isMock, setIsMock] = useState(false);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | ScanStatus>("all");
   const [query, setQuery] = useState("");
@@ -42,15 +41,9 @@ function HistoryPage() {
     (async () => {
       try {
         const data = await getAllScans();
-        if (!cancelled) {
-          setScans(data);
-          setIsMock(false);
-        }
+        if (!cancelled) setScans(data);
       } catch {
-        if (!cancelled) {
-          setScans(mockScanHistory);
-          setIsMock(true);
-        }
+        /* backend unreachable — leave scans empty */
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -62,7 +55,7 @@ function HistoryPage() {
 
   const filtered = scans.filter((s) => {
     if (filter !== "all" && s.status !== filter) return false;
-    if (query && !s.target.toLowerCase().includes(query.toLowerCase()) && !s.scan_id.includes(query))
+    if (query && !(s.target ?? "").toLowerCase().includes(query.toLowerCase()) && !s.scan_id.includes(query))
       return false;
     return true;
   });
@@ -72,13 +65,6 @@ function HistoryPage() {
       <TopBar
         title="Scan History"
         subtitle={`${scans.length} total scans`}
-        actions={
-          isMock && (
-            <span className="rounded border border-warning/40 bg-warning/10 px-2 py-0.5 font-mono text-[10px] text-warning">
-              MOCK
-            </span>
-          )
-        }
       />
       <PageContainer>
         <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -165,15 +151,15 @@ function HistoryPage() {
                       {s.scan_id}
                     </td>
                     <td className="px-4 py-3 text-right font-mono tabular-nums">
-                      <span className={s.summary.findings_count > 0 ? "text-warning" : "text-muted-foreground"}>
-                        {s.summary.findings_count}
+                      <span className={(s.summary?.findings_count ?? 0) > 0 ? "text-warning" : "text-muted-foreground"}>
+                        {s.summary?.findings_count ?? "—"}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">
-                      {s.summary.completed_tasks}/{s.summary.total_tasks}
+                      {s.summary?.completed_tasks ?? "—"}/{s.summary?.total_tasks ?? "—"}
                     </td>
                     <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">
-                      {new Date(s.timestamp).toLocaleString()}
+                      {s.timestamp ? new Date(s.timestamp).toLocaleString() : "—"}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <Button asChild size="sm" variant="ghost" className="opacity-60 group-hover:opacity-100">

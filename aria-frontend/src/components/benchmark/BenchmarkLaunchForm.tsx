@@ -134,6 +134,7 @@ export function BenchmarkLaunchForm({ target }: BenchmarkLaunchFormProps) {
 
       const run: BenchmarkRun = {
         run_id: runId,
+        scan_id,
         target,
         target_name: config.name,
         timestamp: new Date().toISOString(),

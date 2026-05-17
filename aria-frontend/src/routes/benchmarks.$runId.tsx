@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
+  Activity,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { TopBar } from "@/components/layout/TopBar";
@@ -15,6 +16,7 @@ import { GroundTruthMatchTable } from "@/components/benchmark/GroundTruthMatchTa
 import { MetricsRadarChart } from "@/components/benchmark/MetricsRadarChart";
 import { CategoryCoverageChart } from "@/components/benchmark/CategoryCoverageChart";
 import { OWASPHeatmap } from "@/components/benchmark/OWASPHeatmap";
+import { ScanDashboard } from "@/components/scan/ScanDashboard";
 import { useBenchmarkRun } from "@/hooks/useBenchmark";
 import type {
   BenchmarkRun,
@@ -29,19 +31,21 @@ export const Route = createFileRoute("/benchmarks/$runId")({
   component: BenchmarkRunPage,
 });
 
-type TabId = "overview" | "matching" | "analytics" | "raw";
+type TabId = "overview" | "matching" | "analytics" | "raw" | "scan";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "matching", label: "Matching" },
   { id: "analytics", label: "Analytics" },
+  { id: "scan", label: "Live Scan" },
   { id: "raw", label: "Raw Data" },
 ];
 
 function BenchmarkRunPage() {
   const { runId } = useParams({ from: "/benchmarks/$runId" });
   const { run, isLoading, error, scanProgress, scanMessage, recompute } = useBenchmarkRun(runId);
-  const [tab, setTab] = useState<TabId>("overview");
+  const isRunning = !run || run.status === "running" || run.status === "computing";
+  const [tab, setTab] = useState<TabId>(isRunning ? "scan" : "overview");
 
   const exportJson = () => {
     if (!run) return;
@@ -104,22 +108,41 @@ function BenchmarkRunPage() {
         ) : (
           <>
             {/* Tabs */}
-            <div className="mb-4 flex items-center gap-1 border-b border-border">
-              {TABS.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setTab(t.id)}
-                  className={cn(
-                    "border-b-2 px-4 py-2 font-mono text-[10px] uppercase tracking-widest transition-colors",
-                    tab === t.id
-                      ? "border-primary text-primary"
-                      : "border-transparent text-muted-foreground hover:text-foreground",
-                  )}
+            <div className="mb-4 flex items-center justify-between border-b border-border">
+              <div className="flex items-center gap-1">
+                {TABS.filter((t) => t.id !== "scan" || !!run.scan_id).map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setTab(t.id)}
+                    className={cn(
+                      "flex items-center gap-1.5 border-b-2 px-4 py-2 font-mono text-[10px] uppercase tracking-widest transition-colors",
+                      tab === t.id
+                        ? "border-primary text-primary"
+                        : "border-transparent text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {t.id === "scan" && (
+                      <Activity className={cn("h-3 w-3", (isRunning) && "animate-pulse")} />
+                    )}
+                    {t.label}
+                    {t.id === "scan" && isRunning && (
+                      <span className="ml-1 h-1.5 w-1.5 rounded-full bg-cyan animate-pulse" />
+                    )}
+                  </button>
+                ))}
+              </div>
+              {/* Quick link to full scan page */}
+              {run.scan_id && (
+                <Link
+                  to="/scan/$id"
+                  params={{ id: run.scan_id }}
+                  className="inline-flex items-center gap-1.5 pb-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
                 >
-                  {t.label}
-                </button>
-              ))}
+                  <Activity className="h-3 w-3" />
+                  Open scan
+                </Link>
+              )}
             </div>
 
             {tab === "overview" && (
@@ -128,10 +151,17 @@ function BenchmarkRunPage() {
                 isLoading={isLoading}
                 progress={scanProgress}
                 message={scanMessage}
+                onViewScan={run.scan_id ? () => setTab("scan") : undefined}
               />
             )}
             {tab === "matching" && <MatchingTab run={run} onRecompute={recompute} />}
             {tab === "analytics" && <AnalyticsTab run={run} />}
+            {tab === "scan" && run.scan_id && <ScanDashboard scanId={run.scan_id} />}
+            {tab === "scan" && !run.scan_id && (
+              <div className="rounded-lg border border-border bg-card/30 p-12 text-center font-mono text-xs text-muted-foreground">
+                Scan ID not available for this run — it may have been launched in a different session.
+              </div>
+            )}
             {tab === "raw" && <RawDataTab run={run} />}
           </>
         )}
@@ -149,20 +179,34 @@ function OverviewTab({
   isLoading,
   progress,
   message,
+  onViewScan,
 }: {
   run: BenchmarkRun;
   isLoading: boolean;
   progress: number;
   message: string;
+  onViewScan?: () => void;
 }) {
   if (isLoading) {
     return (
       <div className="glass rounded-lg p-8">
-        <div className="mb-4 flex items-center gap-2">
-          <Loader2 className="h-4 w-4 animate-spin text-primary" />
-          <span className="font-mono text-xs uppercase tracking-widest text-foreground">
-            {run.status === "computing" ? "Computing benchmark metrics..." : "Scan running"}
-          </span>
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            <span className="font-mono text-xs uppercase tracking-widest text-foreground">
+              {run.status === "computing" ? "Computing benchmark metrics..." : "Scan running"}
+            </span>
+          </div>
+          {onViewScan && (
+            <button
+              type="button"
+              onClick={onViewScan}
+              className="inline-flex items-center gap-1.5 rounded-md border border-cyan/40 bg-cyan/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-cyan hover:bg-cyan/20"
+            >
+              <Activity className="h-3 w-3" />
+              Live view
+            </button>
+          )}
         </div>
         <div className="mb-1 flex justify-between font-mono text-[10px] text-muted-foreground">
           <span>{message}</span>
