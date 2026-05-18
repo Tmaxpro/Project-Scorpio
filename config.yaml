@@ -21,10 +21,28 @@ llm:
     temperature: 0.1
     max_tokens: 2048
 scan:
-  max_concurrent_agents: 3
+  mode: "fast"               # fast | balanced | thorough
+  max_concurrent_http_slots: 5
+  max_concurrent_agents: 3   # legacy — no longer used by streaming pipeline
   request_timeout: 10
   rate_limit_delay: 0.5
   max_payloads_per_endpoint: 50
+  modes:
+    fast:
+      coordinator_uses_llm: true
+      agents_use_llm: false
+      validator_uses_llm: false
+      description: "Coordinator LLM + agents rule-based. ~15 min."
+    balanced:
+      coordinator_uses_llm: true
+      agents_use_llm: "priority_only"
+      validator_uses_llm: true
+      description: "LLM for priority-1 endpoints only. ~35 min."
+    thorough:
+      coordinator_uses_llm: true
+      agents_use_llm: true
+      validator_uses_llm: true
+      description: "Full LLM on every task. ~90 min."
 rag:
   chroma_persist_dir: ./data/chroma
   embedding_model: all-MiniLM-L6-v2

@@ -53,11 +53,14 @@ class Coordinator:
         spec_summary = TaskBuilder.build_spec_summary(enriched_endpoints)
         rag_context = self._build_rag_context(owasp_filter)
 
+        n_endpoints = len(enriched_endpoints)
         prompt = COORDINATOR_PROMPT.format(
             spec_summary=spec_summary,
             owasp_rag_context=rag_context,
             user_context=context or "No additional context provided.",
             owasp_filter=", ".join(owasp_filter),
+            endpoint_count=n_endpoints,
+            min_tasks=max(n_endpoints, 5),
         )
 
         result = await self._llm.reason(prompt, task_id="coordinator-plan")
@@ -66,12 +69,32 @@ class Coordinator:
         if not tasks:
             logger.warning(
                 "LLM plan empty or invalid — switching to rule-based fallback. "
-                "result_type=%s",
+                "result_type=%s. Tasks will be purely rule-based (no LLM reasoning).",
                 type(result).__name__,
             )
-            return self._rule_based_fallback(enriched_endpoints, owasp_filter)
+            tasks = self._rule_based_fallback(enriched_endpoints, owasp_filter)
+            self._log_task_plan(tasks, enriched_endpoints, owasp_filter)
+            return tasks
 
-        logger.info("Coordinator: %d tasks planned via LLM.", len(tasks))
+        # Supplement: fill in any endpoint × category pairs the LLM missed
+        covered = {(t.target_endpoint, t.vuln_category) for t in tasks}
+        llm_count = len(tasks)
+        counter = llm_count + 1
+        for ep in enriched_endpoints:
+            for cat in ep.owasp_candidates:
+                if cat in owasp_filter and (ep.path, cat) not in covered:
+                    tasks.append(TaskBuilder.from_endpoint_and_category(ep, cat, counter))
+                    covered.add((ep.path, cat))
+                    counter += 1
+        if len(tasks) > llm_count:
+            logger.info(
+                "Supplemented %d LLM tasks with %d rule-based tasks (%d total).",
+                llm_count, len(tasks) - llm_count, len(tasks),
+            )
+        else:
+            logger.info("Coordinator: %d tasks planned via LLM.", len(tasks))
+
+        self._log_task_plan(tasks, enriched_endpoints, owasp_filter)
         return tasks
 
     def _rule_based_fallback(
@@ -93,6 +116,37 @@ class Coordinator:
         return tasks
 
     # ── Internal helpers ───────────────────────────────────────────────── #
+
+    @staticmethod
+    def _log_task_plan(
+        tasks: list[Task],
+        enriched_endpoints: list[EnrichedEndpoint],
+        owasp_filter: list[str],
+    ) -> None:
+        """Log a structured summary of the planned tasks for diagnostics."""
+        by_category: dict[str, int] = {}
+        for t in tasks:
+            by_category[t.vuln_category] = by_category.get(t.vuln_category, 0) + 1
+
+        endpoint_candidates: dict[str, int] = {}
+        for ep in enriched_endpoints:
+            for cat in ep.owasp_candidates:
+                if cat in owasp_filter:
+                    endpoint_candidates[cat] = endpoint_candidates.get(cat, 0) + 1
+
+        logger.info("=" * 60)
+        logger.info("COORDINATOR PLAN — %d tasks for %d endpoints", len(tasks), len(enriched_endpoints))
+        logger.info("By OWASP category: %s", by_category)
+        for cat, count in sorted(endpoint_candidates.items()):
+            planned = by_category.get(cat, 0)
+            if planned == 0:
+                logger.warning("  ⚠ %s — %d candidates but 0 tasks planned", cat, count)
+            else:
+                logger.info("  ✓ %s — %d tasks (from %d candidates)", cat, planned, count)
+        logger.info("Task list:")
+        for t in tasks:
+            logger.info("  [P%s] %s  %s %s", t.priority, t.vuln_category, t.method, t.target_endpoint)
+        logger.info("=" * 60)
 
     def _build_rag_context(self, owasp_filter: list[str]) -> str:
         """Query RAG for the top-2 chunks per requested OWASP category."""

@@ -42,6 +42,11 @@ class BaseAgent:
     def __init__(self, llm: LLMClient, rag: OWASPRag) -> None:
         self._llm = llm
         self._rag = rag
+        self._auth_token: str = ""
+
+    def set_auth_token(self, token: str) -> None:
+        """Provide the current session token so JWT exploit modules can forge from it."""
+        self._auth_token = token
 
     # ── Public API ──────────────────────────────────────────────────────── #
 
@@ -67,9 +72,16 @@ class BaseAgent:
     async def analyze(self, task: Task, endpoint: EnrichedEndpoint) -> AgentDecision:
         """Ask the reasoning model what to do for this task.
 
-        Parses the JSON response into an AgentDecision; falls back to
-        ``get_default_decision()`` on any parse or validation failure.
+        Short-circuits to get_default_decision() when the scan mode does not
+        require LLM agent decisions (fast mode). Falls back on parse failure.
         """
+        if not self._llm.should_use_llm_for_agents(task.priority):
+            logger.debug(
+                "Agent %s skipping LLM for task %s — using rule-based defaults.",
+                self.OWASP_CATEGORY, task.task_id,
+            )
+            return self.get_default_decision(task)
+
         prompt = self.build_system_prompt(task, endpoint)
         result = await self._llm.reason(prompt, task_id=task.task_id)
 

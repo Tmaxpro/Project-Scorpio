@@ -24,6 +24,9 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     """Pre-load the embedding model once at startup so scans don't reload it."""
     import yaml
     from core.rag.owasp_rag import OWASPRag
+    from app.database import init_db
+
+    init_db()
 
     try:
         with open("config.yaml") as fh:

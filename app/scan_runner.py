@@ -1,18 +1,22 @@
 """Top-level scan pipeline orchestrator for ARIA."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+import yaml
+
 from core.agents.auth_agent import AuthAgent
+from core.agents.base_agent import AgentDecision
 from core.agents.bola_agent import BOLAAgent
 from core.agents.injection_agent import InjectionAgent
 from core.agents.mass_assign_agent import MassAssignAgent
 from core.agents.property_auth_agent import PropertyAuthAgent
 from core.agents.rate_limit_agent import RateLimitAgent
 from core.coordinator.coordinator import Coordinator
-from core.coordinator.dispatcher import Dispatcher
+from core.coordinator.task_builder import Task
 from core.http_engine.auth_injector import AuthConfig, AuthInjector
 from core.http_engine.client import HTTPEngineClient
 from core.http_engine.rate_controller import RateController
@@ -23,6 +27,7 @@ from core.payload_factory.nuclei_parser import NucleiPayloadAdapter
 from core.rag.nuclei_index import NucleiIndex
 from core.rag.owasp_rag import OWASPRag
 from core.validator.rule_validator import RuleValidator, ValidationResult
+from core.validator.severity_scorer import apply_contextual_severity
 
 logger = logging.getLogger(__name__)
 
@@ -77,10 +82,16 @@ class ScanRunner:
         auth_token: str = "",
         auth_type: str = "bearer",
         auth_header_name: str = "Authorization",
+        login_username: str = "",
+        login_password: str = "",
+        user2_token: str = "",
+        user2_login_username: str = "",
+        user2_login_password: str = "",
         owasp_filter: list[str] | None = None,
         max_payloads_per_endpoint: int = 20,
         context: str = "",
         scan_id: str | None = None,
+        scan_mode: str = "fast",
         progress_cb: Callable[[float, str], None] | None = None,
         event_cb: _EventCB | None = None,
     ) -> list[ValidationResult]:
@@ -93,6 +104,10 @@ class ScanRunner:
             if progress_cb:
                 progress_cb(progress, msg)
             await _emit("pipeline_phase", {"progress": progress, "message": msg})
+
+        with open(self._config_path) as fh:
+            cfg = yaml.safe_load(fh)
+        max_slots: int = cfg.get("scan", {}).get("max_concurrent_http_slots", 5)
 
         # ── 1. Parse + enrich ─────────────────────────────────────────────── #
         await _p(0.05, "Parsing OpenAPI spec...")
@@ -116,7 +131,8 @@ class ScanRunner:
         # ── 3. Plan tasks (Coordinator) ───────────────────────────────────── #
         await _p(0.20, "Planning tasks with coordinator...")
         from core.llm.client import LLMClient
-        llm = LLMClient(config_path=self._config_path, scan_id=scan_id)
+        llm = LLMClient(config_path=self._config_path, scan_id=scan_id, scan_mode=scan_mode)
+        llm.set_event_cb(_emit)
         coordinator = Coordinator(llm=llm, rag=owasp_rag)
         tasks = await coordinator.plan(
             enriched_endpoints=enriched,
@@ -126,6 +142,7 @@ class ScanRunner:
         await _p(0.30, f"Planned {len(tasks)} tasks")
 
         task_map = {t.task_id: t for t in tasks}
+        endpoint_map = {(ep.path, ep.method.upper()): ep for ep in enriched}
 
         # Announce total tasks and emit task_started events
         await _emit("scan_info", {"total_tasks": len(tasks)})
@@ -138,8 +155,9 @@ class ScanRunner:
                 "agent": f"{task.vuln_category}-Agent",
             })
 
-        # ── 4. Agent decisions (Dispatcher) ──────────────────────────────── #
-        await _p(0.35, "Running attack agents...")
+        # ── 4-7. Streaming per-task pipeline ─────────────────────────────── #
+        await _p(0.35, f"Starting {scan_mode} scan pipeline ({len(tasks)} tasks, {max_slots} slots)...")
+
         agents = {
             "API1": BOLAAgent(llm, owasp_rag),
             "API2": AuthAgent(llm, owasp_rag),
@@ -149,86 +167,132 @@ class ScanRunner:
             "API6": MassAssignAgent(llm, owasp_rag),
             "API8": InjectionAgent(llm, owasp_rag),
         }
-        endpoint_map = {(ep.path, ep.method): ep for ep in enriched}
-        decisions = await Dispatcher(agents=agents, max_concurrent=3).dispatch(
-            tasks, enriched
-        )
-        await _p(0.50, f"Got {len(decisions)} agent decisions")
 
-        # ── 5. Build payloads ─────────────────────────────────────────────── #
-        await _p(0.55, "Building payloads...")
-        factory = PayloadFactory(nuclei_adapter)
-        all_requests = []
-        for decision in decisions:
-            task = task_map.get(decision.task_id)
-            if not task:
-                continue
-            endpoint = endpoint_map.get(
-                (task.target_endpoint, task.method)
-            ) or next(iter(endpoint_map.values()), None)
-            if not endpoint:
-                continue
-            all_requests.extend(
-                factory.build(task, decision, endpoint)[:max_payloads_per_endpoint]
-            )
-        await _p(0.60, f"Built {len(all_requests)} payload requests")
+        # Auto-login before HTTP flood
+        login_path = _detect_login_endpoint(enriched)
+        if login_username and login_password and login_path:
+            await _p(0.38, f"Authenticating as {login_username}…")
+            fresh = await _auto_login(target_url, login_path, login_username, login_password)
+            if fresh:
+                auth_token = fresh
+                logger.info("Auto-login succeeded — fresh token acquired.")
+            else:
+                logger.warning("Auto-login failed — proceeding with original token.")
 
-        # ── 6. HTTP execution ─────────────────────────────────────────────── #
-        await _p(0.65, f"Sending {len(all_requests)} requests to {target_url}...")
+        # Auto-login for second user (victim account for BOLA tests)
+        if user2_login_username and user2_login_password and login_path:
+            await _p(0.39, f"Authenticating second user {user2_login_username}…")
+            fresh2 = await _auto_login(target_url, login_path, user2_login_username, user2_login_password)
+            if fresh2:
+                user2_token = fresh2
+                logger.info("User2 auto-login succeeded — victim token acquired.")
+            else:
+                logger.warning("User2 auto-login failed — BOLA cross-user tests will be skipped.")
+
+        # Give the auth agent the real token so JWT forge uses real claims
+        if auth_token:
+            for key in ("API2", "API5"):
+                a = agents.get(key)
+                if a:
+                    a.set_auth_token(auth_token)
+
         auth_cfg = _build_auth_config(
             auth_type=auth_type,
             auth_token=auth_token,
             auth_header_name=auth_header_name,
+            other_user_token=user2_token,
         )
-
-        async def _on_http_result(r: Any) -> None:
-            status = r.status_code if not r.error else "ERR"
-            await _emit("http_request", {
-                "method": r.request.method,
-                "path": r.request.path,
-                "status": status,
-                "ms": round(r.response_time_ms),
-                "error": r.error,
-            })
-
         http_client = HTTPEngineClient(
             base_url=target_url,
             auth_injector=AuthInjector(auth_cfg),
             rate_controller=RateController(requests_per_second=10.0),
             timeout_s=10.0,
         )
-        scan_results = await http_client.send_batch(all_requests, on_result=_on_http_result)
-        await _p(0.85, f"Received {len(scan_results)} responses")
-
-        # ── 7. Validate ───────────────────────────────────────────────────── #
-        await _p(0.90, "Validating findings...")
+        # Build known_values from credentials so path params use real usernames
+        known_values: dict[str, str] = {}
+        if login_username:
+            known_values["username"] = login_username
+            known_values["user"] = login_username
+        factory = PayloadFactory(nuclei_adapter, known_values=known_values)
         rule_validator = RuleValidator()
-        validation_results: list[ValidationResult] = []
-        total = len(scan_results)
-        for i, result in enumerate(scan_results):
-            checks = rule_validator.check(result)
-            vr = rule_validator.build_result(result, checks)
-            validation_results.append(vr)
-            progress_val = 0.90 + (i + 1) / max(total, 1) * 0.09
-            await _emit("task_completed", {
-                "task_id": vr.task_id,
-                "endpoint": vr.scan_result.request.path,
-                "progress": round(progress_val * 100, 1),
-            })
-            if vr.is_vulnerable:
-                task = task_map.get(vr.task_id)
-                await _emit("finding", {
-                    "finding": _vr_to_task_result(vr, task),
-                })
+
+        semaphore = asyncio.Semaphore(max_slots)
+        all_scan_results: list[Any] = []
+        total_tasks = len(tasks)
+        completed = [0]
+
+        async def run_task(task: Task) -> list[ValidationResult]:
+            async with semaphore:
+                try:
+                    agent = agents.get(task.vuln_category)
+                    ep = endpoint_map.get((task.target_endpoint, task.method.upper()))
+                    if ep is None:
+                        ep = next(iter(endpoint_map.values()), None)
+                    if ep is None:
+                        return []
+
+                    if agent:
+                        decision = await agent.analyze(task, ep)
+                    else:
+                        decision = AgentDecision(
+                            task_id=task.task_id,
+                            chosen_strategies=[task.strategy],
+                            payload_config={},
+                            use_exploit_module=None,
+                            reasoning="no agent for category",
+                        )
+
+                    payloads = factory.build(task, decision, ep)[:max_payloads_per_endpoint]
+
+                    async def _on_http_result(r: Any) -> None:
+                        status = r.status_code if not r.error else "ERR"
+                        await _emit("http_request", {
+                            "method": r.request.method,
+                            "path": r.request.path,
+                            "status": status,
+                            "ms": round(r.response_time_ms),
+                            "error": r.error,
+                        })
+
+                    task_scan_results = await http_client.send_batch(payloads, on_result=_on_http_result)
+                    all_scan_results.extend(task_scan_results)
+
+                    task_vrs: list[ValidationResult] = []
+                    for result in task_scan_results:
+                        checks = rule_validator.check(result)
+                        vr = rule_validator.build_result(result, checks)
+                        apply_contextual_severity(vr, ep)
+                        task_vrs.append(vr)
+                        if vr.is_vulnerable:
+                            await _emit("finding", {
+                                "finding": _vr_to_task_result(vr, task),
+                            })
+
+                    completed[0] += 1
+                    progress_val = 0.35 + (completed[0] / max(total_tasks, 1)) * 0.60
+                    await _emit("task_completed", {
+                        "task_id": task.task_id,
+                        "endpoint": task.target_endpoint,
+                        "progress": round(progress_val * 100, 1),
+                    })
+                    return task_vrs
+
+                except Exception as exc:  # noqa: BLE001
+                    logger.error("Task %s failed: %s", task.task_id, exc)
+                    completed[0] += 1
+                    return []
+
+        batches = await asyncio.gather(*[run_task(t) for t in tasks])
+        validation_results: list[ValidationResult] = [vr for batch in batches for vr in batch]
 
         # Rate-limit batch check grouped by task
         rl_task_ids = {
             r.task_id
-            for r in scan_results
+            for r in all_scan_results
             if r.request.strategy == "rate_limit_absence_check"
         }
         for tid in rl_task_ids:
-            rl_batch = [r for r in scan_results if r.task_id == tid]
+            rl_batch = [r for r in all_scan_results if r.task_id == tid]
             if len(rl_batch) > 10:
                 rl_check = rule_validator.check_rate_limit_batch(rl_batch)
                 if rl_check.triggered:
@@ -239,9 +303,9 @@ class ScanRunner:
                         first_vr.rule_checks.append(rl_check)
                         if rl_check.severity in ("high", "medium"):
                             first_vr.is_vulnerable = True
-                            task = task_map.get(tid)
+                            task_obj = task_map.get(tid)
                             await _emit("finding", {
-                                "finding": _vr_to_task_result(first_vr, task),
+                                "finding": _vr_to_task_result(first_vr, task_obj),
                             })
 
         await _p(1.0, "Done")
@@ -252,15 +316,16 @@ def _build_auth_config(
     auth_type: str,
     auth_token: str,
     auth_header_name: str = "Authorization",
+    other_user_token: str = "",
 ) -> AuthConfig:
     if not auth_token:
-        return AuthConfig(type="none")
+        return AuthConfig(type="none", other_user_token=other_user_token)
     if auth_type in ("apikey", "api_key"):
-        return AuthConfig(type="api_key", token=auth_token, header_name=auth_header_name or "X-Api-Key")
+        return AuthConfig(type="api_key", token=auth_token, header_name=auth_header_name or "X-Api-Key", other_user_token=other_user_token)
     if auth_type == "basic":
-        return AuthConfig(type="basic", token=auth_token)
+        return AuthConfig(type="basic", token=auth_token, other_user_token=other_user_token)
     # Default: bearer
-    return AuthConfig(type="bearer", token=auth_token)
+    return AuthConfig(type="bearer", token=auth_token, other_user_token=other_user_token)
 
 
 def _vr_to_task_result(vr: ValidationResult, task: object | None) -> dict[str, Any]:
@@ -299,3 +364,35 @@ def _vr_to_task_result(vr: ValidationResult, task: object | None) -> dict[str, A
         "owasp_ref": _OWASP_REFS.get(category, category),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+# ── Auto-login helpers ────────────────────────────────────────────────────────
+
+def _detect_login_endpoint(endpoints: list) -> str:
+    """Return the path of a POST endpoint whose path contains 'login', or ''."""
+    for ep in endpoints:
+        if ep.method.upper() == "POST" and "login" in ep.path.lower():
+            return ep.path
+    return ""
+
+
+async def _auto_login(base_url: str, login_path: str, username: str, password: str) -> str:
+    """POST credentials to the login endpoint and return the auth token, or ''."""
+    import httpx
+    url = f"{base_url.rstrip('/')}{login_path}"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.post(url, json={"username": username, "password": password})
+        if r.status_code in (200, 201):
+            data = r.json()
+            for key in ("auth_token", "access_token", "token", "jwt"):
+                if isinstance(data.get(key), str) and data[key]:
+                    return data[key]
+            nested = data.get("data") or data.get("result") or {}
+            if isinstance(nested, dict):
+                for key in ("auth_token", "access_token", "token", "jwt"):
+                    if isinstance(nested.get(key), str) and nested[key]:
+                        return nested[key]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Auto-login to %s failed: %s", url, exc)
+    return ""

@@ -92,6 +92,12 @@ class ReportGenerator:
                 confirmed_by_slm=vr.confirmed_by_slm,
                 slm_reasoning=vr.slm_reasoning,
             ))
+        # Filter known false positives then deduplicate before finalising
+        from core.validator.false_positive_filter import filter_false_positives
+        from core.utils.deduplication import deduplicate_findings
+        findings, _ = filter_false_positives(findings)
+        findings = deduplicate_findings(findings)
+
         return ScanReport(
             scan_id=scan_id,
             target_url=target_url,

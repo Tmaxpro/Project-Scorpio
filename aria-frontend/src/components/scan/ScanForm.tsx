@@ -107,6 +107,7 @@ export function ScanForm() {
     const payload: ScanRequest = {
       openapi_yaml: yamlText,
       base_url: baseUrl.trim(),
+      scan_name: scanName.trim() || undefined,
       auth_type: auth.type,
       credentials: buildCredentials(),
       context: context.trim() || undefined,

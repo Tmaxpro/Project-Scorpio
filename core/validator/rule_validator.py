@@ -91,6 +91,7 @@ class RuleValidator:
             self._check_injection_error(result),
             self._check_admin_endpoint_exposed(result),
             self._check_bola_object_access(result),
+            self._check_mass_assignment(result),
         ]
 
     def check_rate_limit_batch(self, results: list[ScanResult]) -> RuleCheckResult:
@@ -235,3 +236,35 @@ class RuleValidator:
             ),
             owasp_category="API1",
         )
+
+    @staticmethod
+    def _check_mass_assignment(result: ScanResult) -> RuleCheckResult:
+        """API6: injected privilege field reflected back in a 2xx response."""
+        _none = RuleCheckResult("mass_assignment_accepted", False, "high", "", "API6")
+        if result.request.strategy != "mass_assign_exploit":
+            return _none
+        if not (200 <= result.status_code < 300):
+            return _none
+
+        body = result.response_body
+        label = result.request.label  # e.g. "mass_assign:role='admin'"
+
+        # Parse field and expected value from the label
+        if label.startswith("mass_assign:") and "=" in label:
+            part = label[len("mass_assign:"):]
+            eq_pos = part.index("=")
+            field = part[:eq_pos]
+            raw_val = part[eq_pos + 1:].strip("'\"")
+
+            body_lower = body.lower()
+            field_key = f'"{field}"'
+            if field_key in body_lower and raw_val.lower() in body_lower:
+                return RuleCheckResult(
+                    rule_id="mass_assignment_accepted",
+                    triggered=True,
+                    severity="high",
+                    evidence=f"Injected '{field}' reflected as '{raw_val}' in response",
+                    owasp_category="API6",
+                )
+
+        return _none

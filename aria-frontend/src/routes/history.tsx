@@ -55,7 +55,12 @@ function HistoryPage() {
 
   const filtered = scans.filter((s) => {
     if (filter !== "all" && s.status !== filter) return false;
-    if (query && !(s.target ?? "").toLowerCase().includes(query.toLowerCase()) && !s.scan_id.includes(query))
+    if (
+      query &&
+      !(s.target ?? "").toLowerCase().includes(query.toLowerCase()) &&
+      !(s.scan_name ?? "").toLowerCase().includes(query.toLowerCase()) &&
+      !s.scan_id.includes(query)
+    )
       return false;
     return true;
   });
@@ -66,9 +71,9 @@ function HistoryPage() {
         title="Scan History"
         subtitle={`${scans.length} total scans`}
       />
-      <PageContainer>
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[240px]">
+      <PageContainer className="flex h-[calc(100vh-56px)] flex-col pb-6">
+        <div className="mb-4 flex shrink-0 flex-wrap items-center gap-3">
+          <div className="relative min-w-[240px] flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={query}
@@ -96,7 +101,7 @@ function HistoryPage() {
           </div>
         </div>
 
-        <div className="glass overflow-hidden rounded-lg">
+        <div className="glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg">
           {loading ? (
             <div className="p-12 text-center text-xs text-muted-foreground">Loading…</div>
           ) : filtered.length === 0 ? (
@@ -121,57 +126,59 @@ function HistoryPage() {
               className="border-0"
             />
           ) : (
-            <table className="w-full text-left text-xs">
-              <thead className="border-b border-border bg-surface/40">
-                <tr className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                  <th className="px-4 py-2.5">Status</th>
-                  <th className="px-4 py-2.5">Target</th>
-                  <th className="px-4 py-2.5">Scan ID</th>
-                  <th className="px-4 py-2.5 text-right">Findings</th>
-                  <th className="px-4 py-2.5 text-right">Tasks</th>
-                  <th className="px-4 py-2.5">Started</th>
-                  <th className="px-4 py-2.5"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filtered.map((s) => (
-                  <tr key={s.scan_id} className="group hover:bg-surface-hover/40">
-                    <td className="px-4 py-3">
-                      <span
-                        className={cn(
-                          "rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest",
-                          STATUS_CHIP[s.status],
-                        )}
-                      >
-                        {s.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-foreground">{s.target}</td>
-                    <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">
-                      {s.scan_id}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono tabular-nums">
-                      <span className={(s.summary?.findings_count ?? 0) > 0 ? "text-warning" : "text-muted-foreground"}>
-                        {s.summary?.findings_count ?? "—"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">
-                      {s.summary?.completed_tasks ?? "—"}/{s.summary?.total_tasks ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">
-                      {s.timestamp ? new Date(s.timestamp).toLocaleString() : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <Button asChild size="sm" variant="ghost" className="opacity-60 group-hover:opacity-100">
-                        <Link to="/scan/$id" params={{ id: s.scan_id }}>
-                          Open <ChevronRight className="ml-1 h-3 w-3" />
-                        </Link>
-                      </Button>
-                    </td>
+            <div className="flex-1 overflow-auto">
+              <table className="w-full text-left text-xs relative">
+                <thead className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur-md">
+                  <tr className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                    <th className="px-4 py-2.5">Status</th>
+                    <th className="px-4 py-2.5">Target</th>
+                    <th className="px-4 py-2.5">Scan ID</th>
+                    <th className="px-4 py-2.5 text-right">Findings</th>
+                    <th className="px-4 py-2.5 text-right">Tasks</th>
+                    <th className="px-4 py-2.5">Started</th>
+                    <th className="px-4 py-2.5"></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {filtered.map((s) => (
+                    <tr key={s.scan_id} className="group hover:bg-surface-hover/40">
+                      <td className="px-4 py-3">
+                        <span
+                          className={cn(
+                            "rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest",
+                            STATUS_CHIP[s.status],
+                          )}
+                        >
+                          {s.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-foreground">{s.target}</td>
+                      <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">
+                        {s.scan_id}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono tabular-nums">
+                        <span className={(s.findings_count ?? 0) > 0 ? "text-warning" : "text-muted-foreground"}>
+                          {s.findings_count ?? 0}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">
+                        {s.completed_tasks ?? 0}/{s.total_tasks ?? 0}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">
+                        {s.started_at ? new Date(s.started_at).toLocaleString() : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <Button asChild size="sm" variant="ghost" className="opacity-60 group-hover:opacity-100">
+                          <Link to="/scan/$id" params={{ id: s.scan_id }}>
+                            Open <ChevronRight className="ml-1 h-3 w-3" />
+                          </Link>
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </PageContainer>

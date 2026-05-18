@@ -15,11 +15,6 @@ interface LiveLogProps {
 }
 
 export function LiveLog({ logs }: LiveLogProps) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    ref.current?.scrollTo({ top: 0 });
-  }, [logs]);
-
   return (
     <div className="glass scanlines flex h-full flex-col overflow-hidden rounded-lg">
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
@@ -34,14 +29,14 @@ export function LiveLog({ logs }: LiveLogProps) {
         </span>
       </div>
       <ScrollArea className="flex-1">
-        <div ref={ref} className="space-y-0.5 p-3 font-mono text-xs">
+        <div className="space-y-0.5 p-3 font-mono text-xs">
           {logs.length === 0 && (
             <div className="text-muted-foreground">Awaiting events…</div>
           )}
-          {logs.map((l) => (
-            <div key={l.id} className="flex gap-2">
+          {[...logs].sort((a, b) => b.ts.localeCompare(a.ts)).map((l) => (
+            <div key={l.id} className="flex gap-2 hover:bg-surface-hover/40 px-1 -mx-1 rounded">
               <span className="shrink-0 text-muted-foreground/60">
-                {l.ts.slice(11, 19)}
+                {new Date(l.ts).toTimeString().slice(0, 8)}
               </span>
               <span className={cn("shrink-0 uppercase", LEVEL_COLOR[l.level])}>
                 {l.level}

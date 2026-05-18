@@ -52,7 +52,7 @@ function ScanDashboardPage() {
           </>
         }
       />
-      <PageContainer>
+      <PageContainer className="flex h-[calc(100vh-56px)] flex-col overflow-hidden pb-6">
         <ScanDashboard scanId={id} />
       </PageContainer>
     </>

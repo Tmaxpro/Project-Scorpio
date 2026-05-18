@@ -153,3 +153,7 @@ temp/
 *.patch
 *.diff
 scratch/
+
+# -- database --
+
+*.db

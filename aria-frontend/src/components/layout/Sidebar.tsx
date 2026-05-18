@@ -9,7 +9,7 @@ import {
   Settings,
   Zap,
 } from "lucide-react";
-import { checkHealth, getModelsConfig, listBenchmarkRunsLocal } from "@/lib/api";
+import { checkHealth, getModelsConfig, listBenchmarkRuns } from "@/lib/api";
 import type { ModelsResponse } from "@/lib/types";
 import { MODEL_ROLE_META } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -35,10 +35,14 @@ export function Sidebar() {
       const ok = await checkHealth();
       if (mounted) setOnline(ok);
     };
-    const refreshBenchmarks = () => {
+    const refreshBenchmarks = async () => {
       if (!mounted) return;
-      const runs = listBenchmarkRunsLocal();
-      setBenchmarkCount(runs.filter((r) => r.status === "completed").length);
+      try {
+        const runs = await listBenchmarkRuns();
+        if (mounted) setBenchmarkCount(runs.filter((r) => r.status === "completed").length);
+      } catch {
+        // Backend may be offline
+      }
     };
     const refreshModels = async () => {
       if (!mounted) return;

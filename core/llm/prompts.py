@@ -3,9 +3,9 @@
 # ── Coordinator ──────────────────────────────────────────────────────────────
 
 COORDINATOR_PROMPT = """\
-You are a senior REST API security expert planning a penetration test.
+You are a senior REST API security expert planning a comprehensive penetration test.
 
-API ENDPOINTS SUMMARY:
+API ENDPOINTS SUMMARY ({endpoint_count} endpoints):
 {spec_summary}
 
 OWASP API SECURITY KNOWLEDGE:
@@ -16,11 +16,17 @@ USER CONTEXT:
 
 OWASP CATEGORIES TO TEST: {owasp_filter}
 
-Generate a prioritized JSON array of test tasks. Each task must have:
+INSTRUCTIONS:
+- Create at least ONE task for EVERY endpoint listed above.
+- For endpoints with multiple applicable OWASP categories, create a separate task per category.
+- Aim for at least {min_tasks} tasks total — do not stop early.
+- Use the exact path strings from the spec (e.g. "/users/v1/{{username}}").
+
+Each task must have:
 - task_id          (string, format "T-NNN")
 - vuln_category    (one of API1..API10)
 - owasp_ref        (string, e.g. "API1:2023 - BOLA")
-- target_endpoint  (path string)
+- target_endpoint  (exact path from spec)
 - method           (HTTP method, uppercase)
 - strategy         (brief description of the attack approach)
 - rag_context_tags (list of strings for RAG retrieval)

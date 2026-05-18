@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { YamlEditor } from "@/components/scan/YamlEditor";
 import { AccountSetupGuide } from "@/components/benchmark/AccountSetupGuide";
-import { createScan, saveBenchmarkRunLocal } from "@/lib/api";
+import { createScan, saveBenchmarkRun } from "@/lib/api";
 import {
   GROUND_TRUTH,
   GROUND_TRUTH_VERSION,
@@ -54,8 +54,14 @@ export function BenchmarkLaunchForm({ target }: BenchmarkLaunchFormProps) {
   const [yamlValid, setYamlValid] = useState(false);
 
   const [user1Token, setUser1Token] = useState("");
+  const [user1Username, setUser1Username] = useState("");
+  const [user1Password, setUser1Password] = useState("");
   const [user2Token, setUser2Token] = useState("");
+  const [user2Username, setUser2Username] = useState("");
+  const [user2Password, setUser2Password] = useState("");
   const [adminToken, setAdminToken] = useState("");
+  const [adminUsername, setAdminUsername] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
 
   const [scanContext, setScanContext] = useState("");
   const [modelsToTest, setModelsToTest] = useState<ModelName>("both");
@@ -67,13 +73,16 @@ export function BenchmarkLaunchForm({ target }: BenchmarkLaunchFormProps) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  const hasCreds = (token: string, username: string, password: string) =>
+    !!(token.trim() || (username.trim() && password.trim()));
+
   const filledTokens = useMemo(
     () => ({
-      user1_token: !!user1Token.trim(),
-      user2_token: !!user2Token.trim(),
-      admin_token: !!adminToken.trim(),
+      user1_token: hasCreds(user1Token, user1Username, user1Password),
+      user2_token: hasCreds(user2Token, user2Username, user2Password),
+      admin_token: hasCreds(adminToken, adminUsername, adminPassword),
     }),
-    [user1Token, user2Token, adminToken],
+    [user1Token, user1Username, user1Password, user2Token, user2Username, user2Password, adminToken, adminUsername, adminPassword],
   );
 
   const skippedCount = useMemo(() => {
@@ -107,13 +116,26 @@ export function BenchmarkLaunchForm({ target }: BenchmarkLaunchFormProps) {
 
     const runId = `bench_${target}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-    // ScanRequest payload — uses primary user1 token. Backend currently supports
-    // a single bearer token; user2/admin are stored locally for matching context.
+    // ScanRequest payload. Token is used directly if provided; username+password
+    // trigger auto-login on the backend right before HTTP requests are sent.
+    const hasUser2 = hasCreds(user2Token, user2Username, user2Password);
+    const hasAdmin = hasCreds(adminToken, adminUsername, adminPassword);
     const scanPayload: ScanRequest = {
       openapi_yaml: yamlText,
       base_url: baseUrl.trim(),
+      scan_name: config.name,
       auth_type: "bearer",
-      credentials: { token: user1Token.trim() },
+      credentials: {
+        token: user1Token.trim(),
+        username: user1Username.trim(),
+        password: user1Password.trim(),
+      },
+      user2_credentials: hasUser2
+        ? { token: user2Token.trim(), username: user2Username.trim(), password: user2Password.trim() }
+        : undefined,
+      admin_credentials: hasAdmin
+        ? { token: adminToken.trim(), username: adminUsername.trim(), password: adminPassword.trim() }
+        : undefined,
       context: scanContext.trim() || undefined,
       owasp_categories: config.owasp_coverage,
     };
@@ -153,7 +175,7 @@ export function BenchmarkLaunchForm({ target }: BenchmarkLaunchFormProps) {
       };
 
       // Stash the scan_id → run_id mapping in run metadata via sessionStorage too
-      saveBenchmarkRunLocal(run);
+      await saveBenchmarkRun(run);
       window.sessionStorage.setItem(
         `aria:benchmark:scan:${runId}`,
         JSON.stringify({ scan_id, ground_truth_version: GROUND_TRUTH_VERSION }),
@@ -230,43 +252,41 @@ export function BenchmarkLaunchForm({ target }: BenchmarkLaunchFormProps) {
         filled={filledTokens}
       />
 
-      {/* Token inputs */}
-      <div className="space-y-3">
-        <Field label="Primary user token" required>
-          <input
-            type="password"
-            value={user1Token}
-            onChange={(e) => setUser1Token(e.target.value)}
-            placeholder="eyJhbGciOiJIUzI1NiIs..."
-            className={inputCls(false)}
-          />
-        </Field>
+      {/* Credential inputs — token OR username+password for each account */}
+      <div className="space-y-5">
+        <CredentialBlock
+          label="Primary user"
+          required
+          hint="ARIA will auto-login with username+password right before scanning."
+          token={user1Token}
+          username={user1Username}
+          password={user1Password}
+          onToken={setUser1Token}
+          onUsername={setUser1Username}
+          onPassword={setUser1Password}
+        />
         {config.required_accounts.some((a) => a.role === "user2") && (
-          <Field
-            label="Victim user token"
-            hint={`Needed for BOLA/BFLA testing — ${skippedCount > 0 ? `${skippedCount} ground truth entries will be skipped without it` : "ok to leave empty"}`}
-          >
-            <input
-              type="password"
-              value={user2Token}
-              onChange={(e) => setUser2Token(e.target.value)}
-              placeholder="eyJhbGciOiJIUzI1NiIs..."
-              className={inputCls(false)}
-            />
-          </Field>
-        )}
-        <Field
-          label="Admin token"
-          hint="Optional — for admin endpoint tests"
-        >
-          <input
-            type="password"
-            value={adminToken}
-            onChange={(e) => setAdminToken(e.target.value)}
-            placeholder="(optional)"
-            className={inputCls(false)}
+          <CredentialBlock
+            label="Victim user"
+            hint={skippedCount > 0 ? `${skippedCount} ground truth entries skipped without this` : "Optional — for BOLA/BFLA cross-account tests"}
+            token={user2Token}
+            username={user2Username}
+            password={user2Password}
+            onToken={setUser2Token}
+            onUsername={setUser2Username}
+            onPassword={setUser2Password}
           />
-        </Field>
+        )}
+        <CredentialBlock
+          label="Admin"
+          hint="Optional — for admin endpoint tests"
+          token={adminToken}
+          username={adminUsername}
+          password={adminPassword}
+          onToken={setAdminToken}
+          onUsername={setAdminUsername}
+          onPassword={setAdminPassword}
+        />
       </div>
 
       {/* Scan context */}
@@ -361,7 +381,7 @@ export function BenchmarkLaunchForm({ target }: BenchmarkLaunchFormProps) {
       <div className="flex items-center justify-between border-t border-border pt-4">
         <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
           {!yamlValid && "Need valid OpenAPI spec · "}
-          {!filledTokens.user1_token && "Need primary user token · "}
+          {!filledTokens.user1_token && "Need token or username+password for user 1 · "}
           {skippedCount > 0 && filledTokens.user1_token && yamlValid && (
             <span className="text-warning">
               {skippedCount} ground truth entries will be skipped
@@ -445,6 +465,66 @@ function SecureModeToggle({
           )}
         </div>
       </label>
+    </div>
+  );
+}
+
+function CredentialBlock({
+  label,
+  hint,
+  required,
+  token,
+  username,
+  password,
+  onToken,
+  onUsername,
+  onPassword,
+}: {
+  label: string;
+  hint?: string;
+  required?: boolean;
+  token: string;
+  username: string;
+  password: string;
+  onToken: (v: string) => void;
+  onUsername: (v: string) => void;
+  onPassword: (v: string) => void;
+}) {
+  return (
+    <div className="rounded-md border border-border bg-card/30 p-4 space-y-3">
+      <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        {label}
+        {required && <span className="text-danger">*</span>}
+        {hint && <span className="normal-case tracking-normal text-[10px] text-muted-foreground/70 font-sans ml-auto">{hint}</span>}
+      </div>
+      <input
+        type="password"
+        value={token}
+        onChange={(e) => onToken(e.target.value)}
+        placeholder="Bearer token (JWT)…"
+        className={inputCls(false)}
+      />
+      <div className="flex items-center gap-2">
+        <div className="flex-1 h-px bg-border" />
+        <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">or</span>
+        <div className="flex-1 h-px bg-border" />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <input
+          type="text"
+          value={username}
+          onChange={(e) => onUsername(e.target.value)}
+          placeholder="Username"
+          className={inputCls(false)}
+        />
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => onPassword(e.target.value)}
+          placeholder="Password"
+          className={inputCls(false)}
+        />
+      </div>
     </div>
   );
 }

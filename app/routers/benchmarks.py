@@ -98,6 +98,31 @@ async def run_benchmark(body: RunBenchmarkRequest) -> dict:
     # Persist result
     _RUNS_DIR.mkdir(parents=True, exist_ok=True)
     out_path = _RUNS_DIR / f"{run_id}.benchmark.json"
-    out_path.write_text(run_data.model_dump_json(indent=2), encoding="utf-8")
-
     return {"run_id": run_id}
+
+# ── V2 DB-backed Endpoints ──────────────────────────────────────────────────
+
+from typing import Any
+from fastapi import Body, HTTPException
+from app.database import save_benchmark_run, get_all_benchmark_runs, get_benchmark_run, delete_benchmark_run
+
+@router.get("/v2", response_model=list[dict[str, Any]])
+async def list_benchmarks_v2() -> list[dict[str, Any]]:
+    return get_all_benchmark_runs()
+
+@router.get("/v2/{run_id}", response_model=dict[str, Any])
+async def get_benchmark_v2(run_id: str) -> dict[str, Any]:
+    run = get_benchmark_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return run
+
+@router.post("/v2", response_model=dict[str, str])
+async def save_benchmark_v2(run: dict[str, Any] = Body(...)) -> dict[str, str]:
+    save_benchmark_run(run)
+    return {"status": "ok"}
+
+@router.delete("/v2/{run_id}", response_model=dict[str, str])
+async def delete_benchmark_v2(run_id: str) -> dict[str, str]:
+    delete_benchmark_run(run_id)
+    return {"status": "deleted"}

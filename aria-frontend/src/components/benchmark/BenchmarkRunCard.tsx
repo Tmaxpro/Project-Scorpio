@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, Trash2 } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import type { BenchmarkRun } from "@/lib/types";
-import { deleteBenchmarkRunLocal } from "@/lib/api";
+import { deleteBenchmarkRun } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 interface BenchmarkRunCardProps {
@@ -29,24 +30,36 @@ function f1Color(f1: number): string {
 }
 
 export function BenchmarkRunCard({ run, onDeleted }: BenchmarkRunCardProps) {
+  const navigate = useNavigate();
   const totalFound = run.results.reduce((s, r) => s + r.true_positives, 0);
   const totalGT = run.summary.total_ground_truth;
   const coveragePct = totalGT > 0 ? (totalFound / totalGT) * 100 : 0;
 
-  const handleDelete = (e: React.MouseEvent) => {
+  const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
     if (window.confirm(`Delete this benchmark run for ${run.target_name}?`)) {
-      deleteBenchmarkRunLocal(run.run_id);
+      await deleteBenchmarkRun(run.run_id);
       onDeleted?.();
     }
   };
 
+  const handleGoToScan = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (run.scan_id) {
+      navigate({ to: "/scan/$id", params: { id: run.scan_id } });
+    }
+  };
+
+  const handleCardClick = () => {
+    navigate({ to: "/benchmarks/$runId", params: { runId: run.run_id } });
+  };
+
   return (
-    <Link
-      to="/benchmarks/$runId"
-      params={{ runId: run.run_id }}
-      className="glass flex items-center gap-4 rounded-lg border border-border p-4 transition-colors hover:border-primary/40"
+    <div
+      onClick={handleCardClick}
+      className="glass flex items-center gap-4 rounded-lg border border-border p-4 transition-colors hover:border-primary/40 cursor-pointer"
     >
       {/* Date column */}
       <div className="w-28 shrink-0 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -136,8 +149,15 @@ export function BenchmarkRunCard({ run, onDeleted }: BenchmarkRunCardProps) {
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
-        <ArrowRight className="h-4 w-4 text-muted-foreground" />
+        <button
+          type="button"
+          onClick={handleGoToScan}
+          aria-label="View raw scan"
+          className="rounded p-1.5 text-muted-foreground hover:bg-surface-hover/60 hover:text-primary"
+        >
+          <ArrowRight className="h-4 w-4" />
+        </button>
       </div>
-    </Link>
+    </div>
   );
 }
