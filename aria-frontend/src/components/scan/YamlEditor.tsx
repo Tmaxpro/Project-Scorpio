@@ -65,7 +65,7 @@ export function YamlEditor({ value, onChange, onValidityChange }: YamlEditorProp
             type="button"
             onClick={() => setTab(t)}
             className={cn(
-              "border-b-2 px-4 py-2 font-mono text-[10px] uppercase tracking-widest transition-colors",
+              "border-b-2 px-4 py-2 ui-label transition-colors",
               tab === t
                 ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground",
@@ -77,12 +77,12 @@ export function YamlEditor({ value, onChange, onValidityChange }: YamlEditorProp
         <div className="ml-auto pb-2">
           {!parseResult.empty &&
             (parseResult.ok ? (
-              <span className="inline-flex items-center gap-1.5 rounded-md border border-success/40 bg-success/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-success">
+              <span className="ui-chip ui-chip-sm border-success/40 bg-success/10 text-success">
                 <CheckCircle2 className="h-3 w-3" />
                 {parseResult.endpoints} endpoints
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1.5 rounded-md border border-danger/40 bg-danger/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-danger">
+              <span className="ui-chip ui-chip-sm border-danger/40 bg-danger/10 text-danger">
                 <AlertCircle className="h-3 w-3" />
                 Invalid
               </span>
@@ -99,7 +99,7 @@ export function YamlEditor({ value, onChange, onValidityChange }: YamlEditorProp
             rows={20}
             placeholder="openapi: 3.0.0&#10;info:&#10;  title: My API&#10;paths:&#10;  /users:&#10;    get: ..."
             className={cn(
-              "w-full rounded-md border bg-[oklch(0.12_0.02_260)] p-4 font-mono text-xs text-foreground outline-none transition-colors",
+              "w-full rounded-md border bg-card p-4 font-mono text-xs text-foreground outline-none transition-colors",
               "placeholder:text-muted-foreground/50",
               parseResult.empty || parseResult.ok
                 ? "border-border focus:border-primary"
@@ -107,7 +107,7 @@ export function YamlEditor({ value, onChange, onValidityChange }: YamlEditorProp
             )}
           />
           {!parseResult.ok && !parseResult.empty && (
-            <div className="mt-2 flex items-start gap-2 rounded-md border border-danger/40 bg-danger/10 p-2 font-mono text-[11px] text-danger">
+            <div className="mt-2 flex items-start gap-2 rounded-md border border-danger/40 bg-danger/10 p-2 ui-meta text-danger">
               <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span className="break-all">{parseResult.error}</span>
             </div>
@@ -136,7 +136,7 @@ export function YamlEditor({ value, onChange, onValidityChange }: YamlEditorProp
         >
           <FileUp className="h-8 w-8 text-muted-foreground" />
           <div className="text-center">
-            <div className="font-mono text-xs uppercase tracking-widest text-foreground">
+            <div className="ui-label text-foreground">
               Drop OpenAPI spec here
             </div>
             <div className="mt-1 text-xs text-muted-foreground">

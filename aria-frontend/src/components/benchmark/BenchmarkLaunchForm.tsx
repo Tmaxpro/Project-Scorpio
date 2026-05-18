@@ -218,7 +218,7 @@ export function BenchmarkLaunchForm({ target }: BenchmarkLaunchFormProps) {
       >
         <div className="space-y-2">
           {!config.openapi_spec.available && (
-            <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 font-mono text-[10px] text-warning">
+            <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 ui-label text-warning">
               <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
               <span>{config.openapi_spec.note}</span>
             </div>
@@ -228,7 +228,7 @@ export function BenchmarkLaunchForm({ target }: BenchmarkLaunchFormProps) {
               type="button"
               onClick={loadOfficialSpec}
               disabled={loadingSpec}
-              className="inline-flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 ui-label text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
             >
               {loadingSpec ? (
                 <Loader2 className="h-3 w-3 animate-spin" />
@@ -326,7 +326,7 @@ export function BenchmarkLaunchForm({ target }: BenchmarkLaunchFormProps) {
                 className="sr-only"
               />
               <div className="font-mono text-xs text-foreground">{m.label}</div>
-              <div className="mt-0.5 text-[10px] text-muted-foreground">{m.hint}</div>
+              <div className="mt-0.5 ui-label text-muted-foreground">{m.hint}</div>
             </label>
           ))}
         </div>
@@ -348,7 +348,7 @@ export function BenchmarkLaunchForm({ target }: BenchmarkLaunchFormProps) {
               type="button"
               onClick={() => setMatchStrategy(s)}
               className={cn(
-                "rounded px-4 py-1.5 font-mono text-[10px] uppercase tracking-widest transition-colors",
+                "rounded px-4 py-1.5 ui-label transition-colors",
                 matchStrategy === s
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:text-foreground",
@@ -379,7 +379,7 @@ export function BenchmarkLaunchForm({ target }: BenchmarkLaunchFormProps) {
       )}
 
       <div className="flex items-center justify-between border-t border-border pt-4">
-        <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        <div className="ui-label">
           {!yamlValid && "Need valid OpenAPI spec · "}
           {!filledTokens.user1_token && "Need token or username+password for user 1 · "}
           {skippedCount > 0 && filledTokens.user1_token && yamlValid && (
@@ -396,7 +396,7 @@ export function BenchmarkLaunchForm({ target }: BenchmarkLaunchFormProps) {
           onClick={submit}
           disabled={!canLaunch}
           className={cn(
-            "inline-flex items-center gap-2 rounded-md px-5 py-2.5 font-mono text-xs font-bold uppercase tracking-widest transition-all",
+            "inline-flex items-center gap-2 rounded-md px-5 py-2.5 ui-label font-bold transition-all",
             canLaunch
               ? "bg-primary text-primary-foreground glow-cyan hover:opacity-90"
               : "cursor-not-allowed bg-muted text-muted-foreground",
@@ -433,7 +433,7 @@ function SecureModeToggle({
   onToggle: () => void;
 }) {
   return (
-    <div className="rounded-md border border-border bg-card/40 p-4">
+    <div className="ui-panel-muted">
       <label className="flex cursor-pointer items-start gap-3">
         <input
           type="checkbox"
@@ -452,14 +452,14 @@ function SecureModeToggle({
             <button
               type="button"
               onClick={onToggle}
-              className="mt-2 inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-widest text-primary hover:underline"
+              className="mt-2 inline-flex items-center gap-1 ui-label text-primary hover:underline"
             >
               {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
               Show secure mode docker command
             </button>
           )}
           {expanded && config.docker_setup.secure_mode && (
-            <pre className="mt-2 overflow-x-auto rounded border border-border bg-background px-2 py-1.5 font-mono text-[10px] text-foreground">
+            <pre className="mt-2 overflow-x-auto ui-codeblock">
               {config.docker_setup.secure_mode}
             </pre>
           )}
@@ -491,11 +491,11 @@ function CredentialBlock({
   onPassword: (v: string) => void;
 }) {
   return (
-    <div className="rounded-md border border-border bg-card/30 p-4 space-y-3">
-      <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+    <div className="ui-panel-muted space-y-3">
+      <div className="flex items-center gap-2 ui-label">
         {label}
         {required && <span className="text-danger">*</span>}
-        {hint && <span className="normal-case tracking-normal text-[10px] text-muted-foreground/70 font-sans ml-auto">{hint}</span>}
+        {hint && <span className="ml-auto ui-meta text-muted-foreground/70">{hint}</span>}
       </div>
       <input
         type="password"
@@ -506,7 +506,7 @@ function CredentialBlock({
       />
       <div className="flex items-center gap-2">
         <div className="flex-1 h-px bg-border" />
-        <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">or</span>
+        <span className="ui-label ui-label-xs">or</span>
         <div className="flex-1 h-px bg-border" />
       </div>
       <div className="grid grid-cols-2 gap-3">
@@ -532,7 +532,7 @@ function CredentialBlock({
 function SectionHeader({ title, caption }: { title: string; caption: string }) {
   return (
     <div>
-      <div className="font-mono text-[10px] uppercase tracking-widest text-primary">
+      <div className="ui-label text-primary">
         Step 2
       </div>
       <h2 className="mt-1 text-xl font-semibold text-foreground">{title}</h2>
@@ -556,7 +556,7 @@ function Field({
 }) {
   return (
     <div className="space-y-2">
-      <label className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+      <label className="flex items-center gap-2 ui-label">
         {label}
         {required && <span className="text-danger">*</span>}
       </label>
@@ -572,7 +572,7 @@ function Field({
 
 function inputCls(error: boolean) {
   return cn(
-    "w-full rounded-md border bg-[oklch(0.12_0.02_260)] px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/50",
+    "w-full rounded-md border bg-card px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/50",
     error
       ? "border-danger/60 focus:border-danger"
       : "border-border focus:border-primary",

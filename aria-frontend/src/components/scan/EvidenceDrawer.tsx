@@ -19,7 +19,7 @@ interface EvidenceDrawerProps {
 
 function CodeBlock({ children }: { children: string }) {
   return (
-    <pre className="overflow-auto rounded-md border border-border bg-surface px-3 py-2 font-mono text-[11px] leading-relaxed text-foreground/90">
+    <pre className="overflow-auto ui-codeblock text-[11px] leading-relaxed text-foreground/90">
       {children}
     </pre>
   );
@@ -53,16 +53,16 @@ export function EvidenceDrawer({ finding, onClose }: EvidenceDrawerProps) {
               <div className="flex flex-wrap items-center gap-2">
                 <span
                   className={cn(
-                    "rounded border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase",
+                    "ui-chip ui-chip-sm font-semibold",
                     SEV_CLR[finding.severity],
                   )}
                 >
                   {finding.severity}
                 </span>
-                <Badge variant="outline" className="font-mono text-[10px]">
+                <Badge variant="outline" className="ui-label">
                   {OWASP_META[finding.vuln_category].code}
                 </Badge>
-                <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                <span className="ui-label">
                   confidence {finding.confidence}
                 </span>
               </div>
@@ -77,7 +77,7 @@ export function EvidenceDrawer({ finding, onClose }: EvidenceDrawerProps) {
 
             <div className="space-y-5 pt-4">
               <section>
-                <h3 className="mb-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                <h3 className="ui-label mb-2">
                   Remediation
                 </h3>
                 <p className="text-xs leading-relaxed text-foreground/90">
@@ -86,7 +86,7 @@ export function EvidenceDrawer({ finding, onClose }: EvidenceDrawerProps) {
               </section>
 
               <section>
-                <h3 className="mb-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                <h3 className="ui-label mb-2">
                   Request
                 </h3>
                 <CodeBlock>{`${finding.evidence.request.method} ${finding.evidence.request.url}`}</CodeBlock>
@@ -101,13 +101,13 @@ export function EvidenceDrawer({ finding, onClose }: EvidenceDrawerProps) {
               </section>
 
               <section>
-                <h3 className="mb-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                <h3 className="ui-label mb-2">
                   Response
                 </h3>
                 <div className="mb-2 flex items-center gap-3 font-mono text-[11px]">
                   <span
                     className={cn(
-                      "rounded border px-1.5 py-0.5",
+                      "ui-chip ui-chip-xs",
                       finding.evidence.response.status_code >= 500
                         ? "border-[var(--sev-critical)]/40 text-[var(--sev-critical)]"
                         : finding.evidence.response.status_code >= 400
@@ -128,7 +128,7 @@ export function EvidenceDrawer({ finding, onClose }: EvidenceDrawerProps) {
               </section>
 
               <section className="border-t border-border pt-3">
-                <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                <div className="flex items-center justify-between ui-label">
                   <span>task {finding.task_id}</span>
                   <span>{new Date(finding.timestamp).toLocaleString()}</span>
                 </div>

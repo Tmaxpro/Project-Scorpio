@@ -24,14 +24,14 @@ const OPTIONS: {
   icon: typeof Lock;
   desc: string;
 }[] = [
-  { type: "bearer", label: "Bearer Token", icon: Lock, desc: "JWT or OAuth access token" },
-  { type: "apikey", label: "API Key", icon: KeyRound, desc: "Header or query param key" },
-  { type: "basic", label: "Basic Auth", icon: Ticket, desc: "Username + password" },
-  { type: "none", label: "No Auth", icon: ShieldOff, desc: "Public, unauthenticated API" },
-];
+    { type: "bearer", label: "Bearer Token", icon: Lock, desc: "JWT or OAuth access token" },
+    { type: "apikey", label: "API Key", icon: KeyRound, desc: "Header or query param key" },
+    { type: "basic", label: "Basic Auth", icon: Ticket, desc: "Username + password" },
+    { type: "none", label: "No Auth", icon: ShieldOff, desc: "Public, unauthenticated API" },
+  ];
 
 const inputCls =
-  "w-full rounded-md border border-border bg-[oklch(0.12_0.02_260)] px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary";
+  "w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary";
 
 export function AuthConfig({ value, onChange }: AuthConfigProps) {
   const [showSecret, setShowSecret] = useState(false);
@@ -77,10 +77,10 @@ export function AuthConfig({ value, onChange }: AuthConfigProps) {
         })}
       </div>
 
-      <div className="rounded-md border border-border bg-card/60 p-4">
+      <div className="ui-panel-muted">
         {value.type === "bearer" && (
           <div className="space-y-2">
-            <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            <label className="ui-label">
               Token
             </label>
             <div className="relative">
@@ -106,7 +106,7 @@ export function AuthConfig({ value, onChange }: AuthConfigProps) {
         {value.type === "apikey" && (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <div className="space-y-2">
-              <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              <label className="ui-label">
                 Key Name
               </label>
               <input
@@ -117,7 +117,7 @@ export function AuthConfig({ value, onChange }: AuthConfigProps) {
               />
             </div>
             <div className="space-y-2">
-              <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              <label className="ui-label">
                 Key Value
               </label>
               <input
@@ -129,7 +129,7 @@ export function AuthConfig({ value, onChange }: AuthConfigProps) {
               />
             </div>
             <div className="space-y-2">
-              <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              <label className="ui-label">
                 Placement
               </label>
               <select
@@ -149,7 +149,7 @@ export function AuthConfig({ value, onChange }: AuthConfigProps) {
         {value.type === "basic" && (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="space-y-2">
-              <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              <label className="ui-label">
                 Username
               </label>
               <input
@@ -160,7 +160,7 @@ export function AuthConfig({ value, onChange }: AuthConfigProps) {
               />
             </div>
             <div className="space-y-2">
-              <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              <label className="ui-label">
                 Password
               </label>
               <input

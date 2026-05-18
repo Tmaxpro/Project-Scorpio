@@ -31,7 +31,7 @@ function BenchmarksPage() {
         {/* Grey-box info banner */}
         <div className="mb-6 flex items-start gap-3 rounded-md border border-warning/40 bg-warning/10 p-3">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
-          <div className="font-mono text-[11px] text-warning">
+          <div className="ui-meta text-warning">
             <strong>Grey-box mode</strong> — You must provide the OpenAPI spec and user
             credentials for each target. This mirrors real pentest conditions.
           </div>
@@ -60,7 +60,7 @@ function BenchmarksPage() {
         )}
 
         {!selected && runs.length === 0 && (
-          <div className="mb-8 rounded-md border border-dashed border-border bg-card/30 p-8 text-center font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+          <div className="ui-panel-muted border-dashed p-8 text-center ui-label text-muted-foreground">
             Select a target above to configure a benchmark run.
           </div>
         )}
@@ -76,7 +76,7 @@ function BenchmarksPage() {
               <button
                 type="button"
                 onClick={() => setHistoryOpen((v) => !v)}
-                className="rounded-md border border-border bg-card px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+                className="rounded-md border border-border bg-card px-3 py-1 ui-label hover:bg-surface-hover hover:text-foreground"
               >
                 {historyOpen ? "Hide" : "Show"}
               </button>
@@ -87,7 +87,7 @@ function BenchmarksPage() {
                   <BenchmarkRunCard
                     key={r.run_id}
                     run={r}
-                    onDeleted={() => {/* useBenchmarkList polls localStorage */}}
+                    onDeleted={() => {/* useBenchmarkList polls localStorage */ }}
                   />
                 ))}
               </div>
@@ -111,7 +111,7 @@ function SectionTitle({
   if (inline) {
     return (
       <div>
-        <div className="font-mono text-[10px] uppercase tracking-widest text-primary">
+        <div className="ui-label text-primary">
           {step}
         </div>
         <h2 className="text-lg font-semibold text-foreground">{title}</h2>
@@ -120,7 +120,7 @@ function SectionTitle({
   }
   return (
     <div className="mb-3">
-      <div className="font-mono text-[10px] uppercase tracking-widest text-primary">
+      <div className="ui-label text-primary">
         {step}
       </div>
       <h2 className="text-lg font-semibold text-foreground">{title}</h2>

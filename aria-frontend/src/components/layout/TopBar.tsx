@@ -10,7 +10,7 @@ export function TopBar({ title, subtitle, actions }: TopBarProps) {
   return (
     <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border bg-background/80 px-6 backdrop-blur-md">
       <div className="min-w-0">
-        <h1 className="truncate font-mono text-sm font-semibold uppercase tracking-widest text-foreground">
+        <h1 className="truncate ui-label text-foreground">
           {title}
         </h1>
         {subtitle && (

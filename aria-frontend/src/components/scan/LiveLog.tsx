@@ -20,11 +20,11 @@ export function LiveLog({ logs }: LiveLogProps) {
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <div className="flex items-center gap-2">
           <span className="h-2 w-2 animate-pulse-dot rounded-full bg-success text-success" />
-          <h3 className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+          <h3 className="ui-label">
             Live Stream
           </h3>
         </div>
-        <span className="font-mono text-[10px] text-muted-foreground">
+        <span className="ui-meta text-muted-foreground">
           {logs.length} events
         </span>
       </div>

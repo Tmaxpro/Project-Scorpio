@@ -89,7 +89,7 @@ function HistoryPage() {
                 type="button"
                 onClick={() => setFilter(f.value)}
                 className={cn(
-                  "rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-widest transition-colors",
+                  "ui-chip ui-chip-sm transition-colors",
                   filter === f.value
                     ? "border-primary bg-primary/10 text-primary"
                     : "border-border text-muted-foreground hover:bg-surface-hover hover:text-foreground",
@@ -129,7 +129,7 @@ function HistoryPage() {
             <div className="flex-1 overflow-auto">
               <table className="w-full text-left text-xs relative">
                 <thead className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur-md">
-                  <tr className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  <tr className="ui-label">
                     <th className="px-4 py-2.5">Status</th>
                     <th className="px-4 py-2.5">Target</th>
                     <th className="px-4 py-2.5">Scan ID</th>
@@ -145,7 +145,7 @@ function HistoryPage() {
                       <td className="px-4 py-3">
                         <span
                           className={cn(
-                            "rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest",
+                            "ui-chip ui-chip-sm",
                             STATUS_CHIP[s.status],
                           )}
                         >

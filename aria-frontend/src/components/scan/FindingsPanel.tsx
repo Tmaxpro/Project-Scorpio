@@ -50,7 +50,7 @@ export function SeverityCounters({ bySeverity }: SeverityCountersProps) {
               v > 0 && st.glow,
             )}
           >
-            <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            <div className="ui-label">
               {st.label}
             </div>
             <div
@@ -77,10 +77,10 @@ export function FindingsList({ findings, onSelect }: FindingsListProps) {
   return (
     <div className="glass flex h-full flex-col overflow-hidden rounded-lg">
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
-        <h3 className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+        <h3 className="ui-label">
           Findings
         </h3>
-        <span className="font-mono text-[10px] text-muted-foreground">
+        <span className="ui-meta text-muted-foreground">
           {findings.length} total
         </span>
       </div>
@@ -88,10 +88,10 @@ export function FindingsList({ findings, onSelect }: FindingsListProps) {
         {findings.length === 0 ? (
           <div className="flex h-full min-h-32 flex-col items-center justify-center gap-2 px-4 py-8 text-center">
             <ShieldCheck className="h-8 w-8 text-success/70" strokeWidth={1.25} />
-            <div className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+            <div className="ui-label">
               No findings yet
             </div>
-            <div className="text-[11px] text-muted-foreground/80">
+            <div className="ui-meta text-muted-foreground/80">
               Scanner is probing endpoints — vulnerabilities will appear here in real time.
             </div>
           </div>
@@ -107,7 +107,7 @@ export function FindingsList({ findings, onSelect }: FindingsListProps) {
                 >
                   <span
                     className={cn(
-                      "mt-0.5 shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold",
+                      "ui-chip ui-chip-sm font-semibold",
                       st.chip,
                     )}
                   >
@@ -118,7 +118,7 @@ export function FindingsList({ findings, onSelect }: FindingsListProps) {
                       <span className="text-cyan">{f.method}</span>
                       <span className="truncate text-foreground">{f.endpoint}</span>
                     </div>
-                    <div className="text-[11px] text-muted-foreground">
+                    <div className="ui-meta text-muted-foreground">
                       {OWASP_META[f.vuln_category].ref} · confidence {f.confidence}
                     </div>
                   </div>

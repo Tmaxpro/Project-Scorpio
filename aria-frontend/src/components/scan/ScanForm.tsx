@@ -218,7 +218,7 @@ export function ScanForm() {
             onClick={next}
             disabled={!canAdvance()}
             className={cn(
-              "inline-flex items-center gap-2 rounded-md px-4 py-2 font-mono text-xs uppercase tracking-widest transition-all",
+              "inline-flex items-center gap-2 rounded-md px-4 py-2 ui-label transition-all",
               canAdvance()
                 ? "bg-primary text-primary-foreground hover:glow-cyan"
                 : "cursor-not-allowed bg-muted text-muted-foreground",
@@ -233,7 +233,7 @@ export function ScanForm() {
             onClick={submit}
             disabled={!canAdvance() || submitting}
             className={cn(
-              "inline-flex items-center gap-2 rounded-md px-5 py-2.5 font-mono text-xs font-bold uppercase tracking-widest transition-all",
+              "inline-flex items-center gap-2 rounded-md px-5 py-2.5 ui-label font-bold transition-all",
               !canAdvance() || submitting
                 ? "cursor-not-allowed bg-muted text-muted-foreground"
                 : "bg-primary text-primary-foreground glow-cyan hover:opacity-90",
@@ -279,7 +279,7 @@ function Stepper({ current }: { current: number }) {
             <div className="hidden min-w-0 flex-1 sm:block">
               <div
                 className={cn(
-                  "truncate font-mono text-[10px] uppercase tracking-widest",
+                  "truncate ui-label",
                   active
                     ? "text-primary"
                     : done
@@ -317,7 +317,7 @@ function StepBlock({
   return (
     <div className="space-y-5">
       <div>
-        <div className="font-mono text-[10px] uppercase tracking-widest text-primary">
+        <div className="ui-label text-primary">
           Step
         </div>
         <h2 className="mt-1 text-xl font-semibold text-foreground">{title}</h2>
@@ -343,7 +343,7 @@ function Field({
 }) {
   return (
     <div className="space-y-2">
-      <label className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+      <label className="flex items-center gap-2 ui-label">
         {label}
         {required && <span className="text-danger">*</span>}
       </label>
@@ -359,7 +359,7 @@ function Field({
 
 function inputCls(error: boolean) {
   return cn(
-    "w-full rounded-md border bg-[oklch(0.12_0.02_260)] px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/50",
+    "w-full rounded-md border bg-card px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/50",
     error
       ? "border-danger/60 focus:border-danger"
       : "border-border focus:border-primary",

@@ -64,7 +64,7 @@ export function ModelCard({ role, model, onEdit }: ModelCardProps) {
             <div className="flex items-center gap-2">
               <span
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-widest",
+                  "ui-chip ui-chip-sm ui-chip-pill font-bold",
                   badgeBgMap[meta.color],
                 )}
               >
@@ -78,15 +78,15 @@ export function ModelCard({ role, model, onEdit }: ModelCardProps) {
       </div>
 
       {/* Model Name */}
-      <div className="rounded-md border border-border bg-[oklch(0.12_0.02_260)] px-3 py-2.5">
-        <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+      <div className="rounded-md border border-border bg-card px-3 py-2.5">
+        <div className="ui-label">
           Active Model
         </div>
         <div className="mt-1 truncate font-mono text-sm font-medium text-foreground" title={model.name}>
           {shortName}
         </div>
         {model.name !== shortName && (
-          <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground/60" title={model.name}>
+          <div className="mt-0.5 truncate ui-meta text-muted-foreground/60" title={model.name}>
             {model.name}
           </div>
         )}
@@ -94,10 +94,10 @@ export function ModelCard({ role, model, onEdit }: ModelCardProps) {
 
       {/* Parameters */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="flex items-center gap-2 rounded-md border border-border bg-[oklch(0.12_0.02_260)] px-3 py-2">
+        <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2">
           <Thermometer className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <div>
-            <div className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+            <div className="ui-label ui-label-xs">
               Temperature
             </div>
             <div className="font-mono text-sm tabular-nums text-foreground">
@@ -105,10 +105,10 @@ export function ModelCard({ role, model, onEdit }: ModelCardProps) {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2 rounded-md border border-border bg-[oklch(0.12_0.02_260)] px-3 py-2">
+        <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2">
           <Hash className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <div>
-            <div className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+            <div className="ui-label ui-label-xs">
               Max Tokens
             </div>
             <div className="font-mono text-sm tabular-nums text-foreground">
@@ -125,7 +125,7 @@ export function ModelCard({ role, model, onEdit }: ModelCardProps) {
           {model.use_for.map((u) => (
             <span
               key={u}
-              className="rounded-full border border-border bg-card px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground"
+              className="ui-chip ui-chip-xs ui-chip-pill ui-chip-muted"
             >
               {u}
             </span>
@@ -138,7 +138,7 @@ export function ModelCard({ role, model, onEdit }: ModelCardProps) {
         type="button"
         onClick={onEdit}
         className={cn(
-          "mt-auto w-full rounded-md border border-border bg-card px-4 py-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground transition-all",
+          "mt-auto w-full rounded-md border border-border bg-card px-4 py-2 ui-label text-muted-foreground transition-all",
           "hover:border-primary/40 hover:bg-primary/10 hover:text-primary",
         )}
       >

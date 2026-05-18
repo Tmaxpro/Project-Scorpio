@@ -31,7 +31,7 @@ function ScanDashboardPage() {
           <>
             <span
               className={cn(
-                "flex items-center gap-1.5 font-mono text-xs uppercase tracking-widest",
+                "flex items-center gap-1.5 ui-label",
                 statusColor,
               )}
             >

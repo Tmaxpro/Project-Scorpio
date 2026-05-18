@@ -70,7 +70,7 @@ function BenchmarkRunPage() {
               <button
                 type="button"
                 onClick={exportJson}
-                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 ui-label hover:bg-surface-hover hover:text-foreground"
               >
                 <Download className="h-3 w-3" />
                 Export JSON
@@ -83,13 +83,13 @@ function BenchmarkRunPage() {
         <div className="mb-4 flex items-center gap-3">
           <Link
             to="/benchmarks"
-            className="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
+            className="inline-flex items-center gap-2 ui-label text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="h-3 w-3" />
             Back
           </Link>
           {run && (
-            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            <span className="ui-label">
               · {new Date(run.timestamp).toLocaleString()}
             </span>
           )}
@@ -116,7 +116,7 @@ function BenchmarkRunPage() {
                     type="button"
                     onClick={() => setTab(t.id)}
                     className={cn(
-                      "flex items-center gap-1.5 border-b-2 px-4 py-2 font-mono text-[10px] uppercase tracking-widest transition-colors",
+                      "flex items-center gap-1.5 border-b-2 px-4 py-2 ui-label transition-colors",
                       tab === t.id
                         ? "border-primary text-primary"
                         : "border-transparent text-muted-foreground hover:text-foreground",
@@ -137,7 +137,7 @@ function BenchmarkRunPage() {
                 <Link
                   to="/scan/$id"
                   params={{ id: run.scan_id }}
-                  className="inline-flex items-center gap-1.5 pb-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
+                  className="inline-flex items-center gap-1.5 pb-2 ui-label hover:text-foreground"
                 >
                   <Activity className="h-3 w-3" />
                   Open scan
@@ -158,7 +158,7 @@ function BenchmarkRunPage() {
             {tab === "analytics" && <AnalyticsTab run={run} />}
             {tab === "scan" && run.scan_id && <ScanDashboard scanId={run.scan_id} />}
             {tab === "scan" && !run.scan_id && (
-              <div className="rounded-lg border border-border bg-card/30 p-12 text-center font-mono text-xs text-muted-foreground">
+              <div className="ui-panel-muted p-12 text-center font-mono text-xs text-muted-foreground">
                 Scan ID not available for this run — it may have been launched in a different session.
               </div>
             )}
@@ -193,7 +193,7 @@ function OverviewTab({
         <div className="mb-4 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            <span className="font-mono text-xs uppercase tracking-widest text-foreground">
+            <span className="ui-label text-foreground">
               {run.status === "computing" ? "Computing benchmark metrics..." : "Scan running"}
             </span>
           </div>
@@ -201,14 +201,14 @@ function OverviewTab({
             <button
               type="button"
               onClick={onViewScan}
-              className="inline-flex items-center gap-1.5 rounded-md border border-cyan/40 bg-cyan/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-cyan hover:bg-cyan/20"
+              className="inline-flex items-center gap-1.5 rounded-md border border-cyan/40 bg-cyan/10 px-3 py-1.5 ui-label text-cyan hover:bg-cyan/20"
             >
               <Activity className="h-3 w-3" />
               Live view
             </button>
           )}
         </div>
-        <div className="mb-1 flex justify-between font-mono text-[10px] text-muted-foreground">
+        <div className="mb-1 flex justify-between ui-meta">
           <span>{message}</span>
           <span className="tabular-nums">{progress.toFixed(0)}%</span>
         </div>
@@ -229,7 +229,7 @@ function OverviewTab({
     return (
       <div className="glass rounded-lg border border-danger/40 p-8 text-center">
         <XCircle className="mx-auto mb-2 h-6 w-6 text-danger" />
-        <div className="font-mono text-xs uppercase tracking-widest text-danger">
+        <div className="ui-label text-danger">
           Scan failed
         </div>
       </div>
@@ -243,7 +243,7 @@ function OverviewTab({
         <div className="glass flex items-center gap-4 rounded-lg border border-primary/40 p-5">
           <Trophy className="h-8 w-8 text-primary" />
           <div className="min-w-0 flex-1">
-            <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            <div className="ui-label">
               Winner
             </div>
             <div className="font-mono text-base text-foreground">
@@ -251,7 +251,7 @@ function OverviewTab({
             </div>
           </div>
           <div className="text-right">
-            <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            <div className="ui-label">
               Best F1
             </div>
             <div className="font-mono text-2xl tabular-nums text-primary">
@@ -283,7 +283,7 @@ function ModelResultCard({ result, totalGT }: { result: ModelBenchmarkResult; to
           {result.f1_score.toFixed(3)}
         </span>
       </div>
-      <div className="mb-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+      <div className="ui-label mb-3">
         F1 Score
       </div>
 
@@ -294,21 +294,21 @@ function ModelResultCard({ result, totalGT }: { result: ModelBenchmarkResult; to
         <Stat label="Fallbacks" value={String(result.fallback_count)} />
       </div>
 
-      <div className="mb-3 flex items-center gap-2 font-mono text-[10px]">
-        <span className="rounded border border-success/40 bg-success/10 px-2 py-0.5 text-success">
+      <div className="mb-3 flex items-center gap-2 ui-meta">
+        <span className="ui-chip ui-chip-sm border-success/40 bg-success/10 text-success">
           TP {result.true_positives}
         </span>
-        <span className="rounded border border-warning/40 bg-warning/10 px-2 py-0.5 text-warning">
+        <span className="ui-chip ui-chip-sm border-warning/40 bg-warning/10 text-warning">
           FP {result.false_positives}
         </span>
-        <span className="rounded border border-danger/40 bg-danger/10 px-2 py-0.5 text-danger">
+        <span className="ui-chip ui-chip-sm border-danger/40 bg-danger/10 text-danger">
           FN {result.false_negatives}
         </span>
       </div>
 
       {/* TP proportion bar */}
       <div>
-        <div className="mb-1 flex justify-between font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+        <div className="mb-1 flex justify-between ui-label ui-label-xs">
           <span>Coverage</span>
           <span className="tabular-nums text-foreground">
             {result.true_positives}/{totalGT}
@@ -329,7 +329,7 @@ function SummaryRow({ run }: { run: BenchmarkRun }) {
   return (
     <div className="glass grid gap-4 rounded-lg p-5 sm:grid-cols-3">
       <div>
-        <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        <div className="ui-label">
           Total ground truth
         </div>
         <div className="font-mono text-xl tabular-nums text-foreground">
@@ -337,7 +337,7 @@ function SummaryRow({ run }: { run: BenchmarkRun }) {
         </div>
       </div>
       <div>
-        <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        <div className="ui-label">
           Match strategy
         </div>
         <div className="font-mono text-sm uppercase text-foreground">
@@ -345,14 +345,14 @@ function SummaryRow({ run }: { run: BenchmarkRun }) {
         </div>
       </div>
       <div>
-        <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        <div className="ui-label">
           Models tested
         </div>
         <div className="font-mono text-sm text-foreground">{run.results.length}</div>
       </div>
 
       <div className="sm:col-span-3">
-        <div className="mb-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        <div className="ui-label mb-2">
           OWASP coverage
         </div>
         <div className="flex flex-wrap gap-2">
@@ -401,7 +401,7 @@ function CoverageChips({
     <div className="flex flex-wrap items-center gap-1">
       <span
         className={cn(
-          "inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest",
+          "ui-chip ui-chip-xs",
           cls,
         )}
       >
@@ -411,7 +411,7 @@ function CoverageChips({
       {categories.map((c) => (
         <span
           key={c}
-          className="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-foreground"
+          className="ui-chip ui-chip-xs ui-chip-muted text-foreground"
         >
           {c}
         </span>
@@ -443,7 +443,7 @@ function MatchingTab({
 
   if (!active) {
     return (
-      <div className="glass rounded-lg p-8 text-center font-mono text-xs uppercase tracking-widest text-muted-foreground">
+      <div className="glass rounded-lg p-8 text-center ui-label text-muted-foreground">
         No results yet — scan still running.
       </div>
     );
@@ -461,7 +461,7 @@ function MatchingTab({
                 type="button"
                 onClick={() => setActiveModelIdx(i)}
                 className={cn(
-                  "rounded px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest transition-colors",
+                  "rounded px-3 py-1.5 ui-label transition-colors",
                   activeModelIdx === i
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:text-foreground",
@@ -472,13 +472,13 @@ function MatchingTab({
             ))}
           </div>
         ) : (
-          <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          <div className="ui-label">
             Model: {prettyModel(active.model)}
           </div>
         )}
 
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          <span className="ui-label">
             Strategy:
           </span>
           <div className="inline-flex rounded-md border border-border bg-card p-0.5">
@@ -488,7 +488,7 @@ function MatchingTab({
                 type="button"
                 onClick={() => onRecompute(s)}
                 className={cn(
-                  "rounded px-3 py-1 font-mono text-[10px] uppercase tracking-widest transition-colors",
+                  "rounded px-3 py-1 ui-label transition-colors",
                   run.config.match_strategy === s
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:text-foreground",
@@ -518,7 +518,7 @@ function MatchingTab({
 function AnalyticsTab({ run }: { run: BenchmarkRun }) {
   if (run.results.length === 0) {
     return (
-      <div className="glass rounded-lg p-12 text-center font-mono text-xs uppercase tracking-widest text-muted-foreground">
+      <div className="glass rounded-lg p-12 text-center ui-label text-muted-foreground">
         No results yet — scan still running.
       </div>
     );
@@ -547,12 +547,12 @@ function AnalyticsTab({ run }: { run: BenchmarkRun }) {
           <table className="w-full font-mono text-[11px]">
             <thead>
               <tr className="border-b border-border text-left text-muted-foreground">
-                <th className="px-3 py-2 font-mono text-[10px] uppercase tracking-widest">Model</th>
-                <th className="px-3 py-2 text-right font-mono text-[10px] uppercase tracking-widest">Tokens in</th>
-                <th className="px-3 py-2 text-right font-mono text-[10px] uppercase tracking-widest">Tokens out</th>
-                <th className="px-3 py-2 text-right font-mono text-[10px] uppercase tracking-widest">Avg latency</th>
-                <th className="px-3 py-2 text-right font-mono text-[10px] uppercase tracking-widest">Fallbacks</th>
-                <th className="px-3 py-2 font-mono text-[10px] uppercase tracking-widest">Cost</th>
+                <th className="px-3 py-2 ui-label">Model</th>
+                <th className="px-3 py-2 text-right ui-label">Tokens in</th>
+                <th className="px-3 py-2 text-right ui-label">Tokens out</th>
+                <th className="px-3 py-2 text-right ui-label">Avg latency</th>
+                <th className="px-3 py-2 text-right ui-label">Fallbacks</th>
+                <th className="px-3 py-2 ui-label">Cost</th>
               </tr>
             </thead>
             <tbody>
@@ -577,7 +577,7 @@ function AnalyticsTab({ run }: { run: BenchmarkRun }) {
 function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="glass rounded-lg p-4">
-      <div className="mb-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+      <div className="ui-label mb-3">
         {title}
       </div>
       {children}
@@ -602,18 +602,18 @@ function RawDataTab({ run }: { run: BenchmarkRun }) {
   return (
     <div className="glass overflow-hidden rounded-lg">
       <div className="flex items-center justify-between border-b border-border px-4 py-2">
-        <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        <div className="ui-label">
           Full BenchmarkRun JSON · {json.length.toLocaleString()} chars
         </div>
         <button
           type="button"
           onClick={copy}
-          className="rounded-md border border-border bg-card px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+          className="rounded-md border border-border bg-card px-3 py-1 ui-label text-muted-foreground hover:bg-surface-hover hover:text-foreground"
         >
           {copied ? "✓ Copied" : "Copy"}
         </button>
       </div>
-      <pre className="max-h-[600px] overflow-auto bg-[oklch(0.06_0.02_260)] p-4 font-mono text-[10px] leading-relaxed text-foreground">
+      <pre className="max-h-[600px] overflow-auto ui-codeblock leading-relaxed">
         {json}
       </pre>
     </div>
@@ -627,7 +627,7 @@ function RawDataTab({ run }: { run: BenchmarkRun }) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+      <div className="ui-label ui-label-xs">
         {label}
       </div>
       <div className="font-mono tabular-nums text-foreground">{value}</div>

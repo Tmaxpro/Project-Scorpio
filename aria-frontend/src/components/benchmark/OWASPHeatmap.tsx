@@ -47,7 +47,7 @@ function cellTone(state: CellState): "empty" | "green" | "amber" | "red" {
 
 const TONE_STYLE = {
   empty:
-    "border-border bg-[oklch(0.08_0.02_260)] text-muted-foreground",
+    "border-border bg-[var(--panel-muted)] text-muted-foreground",
   green:
     "border-success/40 bg-success/15 text-success",
   amber:
@@ -80,17 +80,17 @@ export function OWASPHeatmap({ results }: Props) {
               <div className="flex items-center justify-between">
                 <span className="font-mono text-xs font-bold tabular-nums">{cell.cat}</span>
                 {cell.totalFP > 0 && (
-                  <span className="rounded border border-danger/40 bg-danger/20 px-1 font-mono text-[8px] uppercase tracking-widest text-danger">
+                  <span className="ui-chip ui-chip-xs border-danger/40 bg-danger/20 text-danger">
                     +{cell.totalFP} FP
                   </span>
                 )}
               </div>
-              <div className="mt-0.5 truncate font-mono text-[8px] uppercase tracking-widest opacity-75">
+              <div className="mt-0.5 truncate ui-label text-[8px] opacity-75">
                 {meta.name}
               </div>
               <div className="mt-auto text-right">
                 {tone === "empty" ? (
-                  <span className="font-mono text-[10px] uppercase tracking-widest opacity-50">
+                  <span className="ui-label opacity-50">
                     No GT
                   </span>
                 ) : (

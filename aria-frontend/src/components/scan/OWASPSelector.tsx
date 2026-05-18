@@ -25,14 +25,14 @@ export function OWASPSelector({ selected, onChange }: OWASPSelectorProps) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        <h3 className="ui-label">
           OWASP API Security Top 10
         </h3>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => onChange(allSelected ? [] : allCodes)}
-            className="rounded border border-border px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:border-primary/50 hover:text-primary"
+            className="ui-chip ui-chip-sm border-border text-muted-foreground hover:border-primary/50 hover:text-primary"
           >
             {allSelected ? "Deselect All" : "Select All"}
           </button>
@@ -67,7 +67,7 @@ export function OWASPSelector({ selected, onChange }: OWASPSelectorProps) {
                 </span>
                 <span
                   className={cn(
-                    "rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider",
+                    "ui-chip ui-chip-xs",
                     RISK_STYLES[cat.risk],
                   )}
                 >
@@ -93,7 +93,7 @@ export function OWASPSelector({ selected, onChange }: OWASPSelectorProps) {
                     </svg>
                   )}
                 </span>
-                <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+                <span className="ui-label ui-label-xs">
                   {active ? "Enabled" : "Disabled"}
                 </span>
               </div>
