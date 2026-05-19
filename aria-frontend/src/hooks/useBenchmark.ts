@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { apiBaseUrl, getBenchmarkRunLocal, listBenchmarkRunsLocal, saveBenchmarkRunLocal } from "@/lib/api";
+import { apiBaseUrl, getBenchmarkRun, listBenchmarkRuns, saveBenchmarkRun } from "@/lib/api";
 import { computeBenchmarkResults, computeRunSummary } from "@/lib/benchmark-matcher";
 import type {
   BenchmarkRun,
@@ -9,6 +9,7 @@ import type {
   ScanResult,
   Severity,
   TaskResult,
+  ModelUsageEntry,
 } from "@/lib/types";
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -36,6 +37,7 @@ interface BackendResults {
   total_requests: number;
   vulnerable_count: number;
   findings: BackendFinding[];
+  model_usage_log?: ModelUsageEntry[];
 }
 
 interface BackendStatus {
@@ -90,7 +92,7 @@ function backendFindingToTaskResult(bf: BackendFinding): TaskResult {
   };
 }
 
-function buildScanResult(status: BackendStatus, findings: TaskResult[]): ScanResult {
+function buildScanResult(status: BackendStatus, findings: TaskResult[], model_usage_log?: ModelUsageEntry[]): ScanResult {
   return {
     scan_id: status.scan_id,
     status: "completed",
@@ -106,7 +108,7 @@ function buildScanResult(status: BackendStatus, findings: TaskResult[]): ScanRes
       by_severity: countBySeverity(findings),
       by_category: countByCategory(findings),
     },
-    model_usage_log: [],
+    model_usage_log: model_usage_log ?? [],
   };
 }
 
@@ -142,7 +144,7 @@ interface UseBenchmarkRunResult {
 }
 
 export function useBenchmarkRun(runId: string): UseBenchmarkRunResult {
-  const [run, setRun] = useState<BenchmarkRun | null>(() => getBenchmarkRunLocal(runId));
+  const [run, setRun] = useState<BenchmarkRun | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [scanProgress, setScanProgress] = useState(0);
   const [scanMessage, setScanMessage] = useState("Connecting...");
@@ -151,9 +153,9 @@ export function useBenchmarkRun(runId: string): UseBenchmarkRunResult {
 
   // Re-apply matching with a new strategy — no API call.
   const recompute = useCallback(
-    (strategy: MatchStrategy) => {
+    async (strategy: MatchStrategy) => {
       const current = scanResultRef.current;
-      const localRun = getBenchmarkRunLocal(runId);
+      const localRun = await getBenchmarkRun(runId);
       if (!current || !localRun) return;
       const primaryModel: ModelName =
         localRun.config.models_to_test === "qwen2.5" ? "qwen2.5" : "foundation-sec-reasoning";
@@ -166,7 +168,7 @@ export function useBenchmarkRun(runId: string): UseBenchmarkRunResult {
         results: [newResult],
         summary: { ...newSummary },
       };
-      saveBenchmarkRunLocal(updated);
+      await saveBenchmarkRun(updated);
       setRun(updated);
     },
     [runId],
@@ -181,107 +183,111 @@ export function useBenchmarkRun(runId: string): UseBenchmarkRunResult {
       : null;
     const meta: SessionMeta | null = metaRaw ? JSON.parse(metaRaw) : null;
 
-    const localRun = getBenchmarkRunLocal(runId);
-    if (!localRun) {
-      setError("Run not found");
-      return;
-    }
-    setRun(localRun);
-
-    // If already completed and we have results, nothing to poll.
-    if (localRun.status === "completed" && localRun.results.length > 0) {
-      return;
-    }
-
-    // Need scan_id to poll
-    if (!meta?.scan_id) {
-      // Run is in localStorage but scan_id has been lost (e.g. different tab).
-      // We can still display the saved run; just no polling.
-      return;
-    }
-
-    const finalize = async (status: BackendStatus) => {
-      try {
-        const res = await fetch(`${apiBaseUrl}/api/scan/${status.scan_id}/results`);
-        if (!res.ok) throw new Error(`Results fetch failed: ${res.status}`);
-        const data: BackendResults = await res.json();
-        const findings = data.findings.map(backendFindingToTaskResult);
-        const scan = buildScanResult(status, findings);
-        scanResultRef.current = scan;
-
-        const primaryModel: ModelName =
-          localRun.config.models_to_test === "qwen2.5"
-            ? "qwen2.5"
-            : "foundation-sec-reasoning";
-        const result = computeBenchmarkResults(
-          scan,
-          localRun.target,
-          primaryModel,
-          localRun.config.match_strategy,
-        );
-        const summary = computeRunSummary([result], localRun.target);
-
-        const completed: BenchmarkRun = {
-          ...localRun,
-          scan_id: localRun.scan_id || meta.scan_id,
-          status: "completed",
-          results: [result],
-          summary,
-        };
-        if (!cancelled) {
-          saveBenchmarkRunLocal(completed);
-          setRun(completed);
-        }
-      } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Failed to compute results");
-        }
+    const init = async () => {
+      const localRun = await getBenchmarkRun(runId);
+      if (cancelled) return;
+      if (!localRun) {
+        setError("Run not found");
+        return;
       }
-    };
+      setRun(localRun);
 
-    const poll = async () => {
-      try {
-        const res = await fetch(`${apiBaseUrl}/api/scan/${meta.scan_id}`);
-        if (!res.ok) throw new Error(`Status fetch failed: ${res.status}`);
-        const status: BackendStatus = await res.json();
-        if (cancelled) return;
-        setScanProgress(status.progress * 100);
-        setScanMessage(status.message);
+      // If already completed and we have results, nothing to poll.
+      if (localRun.status === "completed" && localRun.results.length > 0) {
+        return;
+      }
 
-        if (status.status === "completed") {
-          stopPolling();
-          // Mark as computing while we fetch and crunch
-          const computing: BenchmarkRun = { ...localRun, status: "computing" };
-          saveBenchmarkRunLocal(computing);
-          setRun(computing);
-          await finalize(status);
-        } else if (status.status === "failed") {
-          stopPolling();
-          const failed: BenchmarkRun = { ...localRun, status: "failed" };
-          saveBenchmarkRunLocal(failed);
+      // Need scan_id to poll
+      if (!meta?.scan_id) {
+        return;
+      }
+
+      const finalize = async (status: BackendStatus) => {
+        try {
+          const res = await fetch(`${apiBaseUrl}/api/scan/${status.scan_id}/results`);
+          if (!res.ok) throw new Error(`Results fetch failed: ${res.status}`);
+          const data: BackendResults = await res.json();
+          const findings = data.findings.map(backendFindingToTaskResult);
+          const scan = buildScanResult(status, findings, data.model_usage_log);
+          scanResultRef.current = scan;
+
+          const primaryModel: ModelName =
+            localRun.config.models_to_test === "qwen2.5"
+              ? "qwen2.5"
+              : "foundation-sec-reasoning";
+          const result = computeBenchmarkResults(
+            scan,
+            localRun.target,
+            primaryModel,
+            localRun.config.match_strategy,
+          );
+          const summary = computeRunSummary([result], localRun.target);
+
+          const completed: BenchmarkRun = {
+            ...localRun,
+            scan_id: localRun.scan_id || meta.scan_id,
+            status: "completed",
+            results: [result],
+            summary,
+          };
           if (!cancelled) {
-            setRun(failed);
-            setError(status.message || "Scan failed");
+            await saveBenchmarkRun(completed);
+            setRun(completed);
+          }
+        } catch (e) {
+          if (!cancelled) {
+            setError(e instanceof Error ? e.message : "Failed to compute results");
           }
         }
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Polling error");
-      }
+      };
+
+      const poll = async () => {
+        try {
+          const res = await fetch(`${apiBaseUrl}/api/scan/${meta.scan_id}`);
+          if (!res.ok) throw new Error(`Status fetch failed: ${res.status}`);
+          const status: BackendStatus = await res.json();
+          if (cancelled) return;
+          setScanProgress(status.progress * 100);
+          setScanMessage(status.message);
+
+          if (status.status === "completed") {
+            stopPolling();
+            const computing: BenchmarkRun = { ...localRun, status: "computing" };
+            await saveBenchmarkRun(computing);
+            if (!cancelled) setRun(computing);
+            await finalize(status);
+          } else if (status.status === "failed") {
+            stopPolling();
+            const failed: BenchmarkRun = { ...localRun, status: "failed" };
+            await saveBenchmarkRun(failed);
+            if (!cancelled) {
+              setRun(failed);
+              setError(status.message || "Scan failed");
+            }
+          }
+        } catch (e) {
+          if (!cancelled) setError(e instanceof Error ? e.message : "Polling error");
+        }
+      };
+
+      const stopPolling = () => {
+        if (pollTimer.current) {
+          clearInterval(pollTimer.current);
+          pollTimer.current = null;
+        }
+      };
+
+      void poll();
+      pollTimer.current = setInterval(poll, 2000);
     };
 
-    const stopPolling = () => {
-      if (pollTimer.current) {
-        clearInterval(pollTimer.current);
-        pollTimer.current = null;
-      }
-    };
-
-    void poll();
-    pollTimer.current = setInterval(poll, 2000);
+    void init();
 
     return () => {
       cancelled = true;
-      stopPolling();
+      if (pollTimer.current) {
+        clearInterval(pollTimer.current);
+      }
     };
   }, [runId]);
 
@@ -296,13 +302,24 @@ export function useBenchmarkRun(runId: string): UseBenchmarkRunResult {
  * ────────────────────────────────────────────────────────────────────────── */
 
 export function useBenchmarkList(): { runs: BenchmarkRun[] } {
-  const [runs, setRuns] = useState<BenchmarkRun[]>(() => listBenchmarkRunsLocal());
+  const [runs, setRuns] = useState<BenchmarkRun[]>([]);
 
   useEffect(() => {
-    const refresh = () => setRuns(listBenchmarkRunsLocal());
-    refresh();
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const data = await listBenchmarkRuns();
+        if (!cancelled) setRuns(data);
+      } catch (e) {
+        // Handle error quietly
+      }
+    };
+    void refresh();
     const id = setInterval(refresh, 3000);
-    return () => clearInterval(id);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, []);
 
   return { runs };

@@ -16,7 +16,7 @@ function NotFoundComponent() {
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="max-w-md text-center">
         <div className="font-mono text-7xl font-bold text-primary glow-cyan">404</div>
-        <h2 className="mt-4 font-mono text-sm uppercase tracking-widest text-foreground">
+        <h2 className="mt-4 ui-label text-foreground">
           Endpoint not found
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
@@ -39,7 +39,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="max-w-md text-center">
-        <h1 className="font-mono text-sm uppercase tracking-widest text-danger">
+        <h1 className="ui-label text-danger">
           Runtime error
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>

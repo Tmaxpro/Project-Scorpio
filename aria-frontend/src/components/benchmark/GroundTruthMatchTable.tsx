@@ -99,12 +99,12 @@ function Column({
   return (
     <div className={cn("glass overflow-hidden rounded-lg border", ring)}>
       <div className={cn("flex items-center justify-between border-b border-border px-4 py-2", text)}>
-        <span className="font-mono text-[10px] uppercase tracking-widest">{title}</span>
+        <span className="ui-label text-inherit">{title}</span>
         <span className="font-mono text-sm tabular-nums">{count}</span>
       </div>
       <div className="max-h-[600px] space-y-2 overflow-y-auto p-3">
         {count === 0 ? (
-          <p className="rounded-md border border-dashed border-border bg-card/30 p-4 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          <p className="ui-panel-muted border-dashed p-4 text-center ui-label text-muted-foreground">
             {emptyMessage}
           </p>
         ) : (
@@ -120,19 +120,19 @@ function TruePositiveCard({ match }: { match: MatchedFinding }) {
   const m = MATCH_TYPE_STYLE[match.match_type];
 
   return (
-    <div className="rounded-md border border-border bg-card/40 p-3">
+    <div className="ui-panel-muted ui-panel-compact">
       <div className="mb-1 flex flex-wrap items-center gap-1.5">
         <CategoryBadge cat={match.ground_truth.vuln_category} />
         <SeverityBadge sev={match.ground_truth.severity} />
-        <span className={cn("rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest", m.color)}>
+        <span className={cn("ui-chip ui-chip-xs", m.color)}>
           {m.label}
         </span>
-        <span className="ml-auto font-mono text-[9px] tabular-nums text-muted-foreground">
+        <span className="ml-auto ui-meta ui-meta-xs tabular-nums text-muted-foreground">
           {(match.match_score * 100).toFixed(0)}%
         </span>
       </div>
-      <p className="mb-2 text-[11px] text-muted-foreground">{match.ground_truth.description}</p>
-      <div className="rounded border border-border bg-background px-2 py-1 font-mono text-[10px] text-foreground">
+      <p className="mb-2 ui-meta text-muted-foreground">{match.ground_truth.description}</p>
+      <div className="ui-codeblock">
         <span className="text-muted-foreground">↳ Found as: </span>
         <span className="text-success">{match.aria_finding.method}</span>{" "}
         <span>{match.aria_finding.endpoint}</span>
@@ -140,17 +140,17 @@ function TruePositiveCard({ match }: { match: MatchedFinding }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="mt-2 flex items-center gap-1 font-mono text-[9px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
+        className="mt-2 flex items-center gap-1 ui-label ui-label-xs hover:text-foreground"
       >
         {open ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
         Evidence
       </button>
       {open && (
-        <div className="mt-2 space-y-1 rounded border border-border bg-background p-2 font-mono text-[10px]">
+        <div className="mt-2 space-y-1 ui-codeblock">
           <div className="text-muted-foreground">Remediation:</div>
           <div className="text-foreground">{match.aria_finding.remediation || "—"}</div>
           <div className="mt-1 text-muted-foreground">Response excerpt:</div>
-          <pre className="overflow-x-auto whitespace-pre-wrap text-[10px] text-foreground">
+          <pre className="overflow-x-auto whitespace-pre-wrap text-foreground">
             {match.aria_finding.evidence.response.body_excerpt || "(no body captured)"}
           </pre>
         </div>
@@ -164,7 +164,7 @@ function FalseNegativeCard({ gt, hadVictimToken }: { gt: GroundTruthEntry; hadVi
   return (
     <div
       className={cn(
-        "rounded-md border bg-card/40 p-3",
+        "ui-panel-muted ui-panel-compact",
         skipped ? "border-warning/40" : "border-border",
       )}
     >
@@ -172,17 +172,17 @@ function FalseNegativeCard({ gt, hadVictimToken }: { gt: GroundTruthEntry; hadVi
         <CategoryBadge cat={gt.vuln_category} />
         <SeverityBadge sev={gt.severity} />
         {skipped && (
-          <span className="inline-flex items-center gap-1 rounded border border-warning/40 bg-warning/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-warning">
+          <span className="ui-chip ui-chip-xs border-warning/40 bg-warning/10 text-warning">
             <AlertTriangle className="h-2.5 w-2.5" />
             Skipped — no victim token
           </span>
         )}
       </div>
-      <p className="mb-2 text-[11px] text-muted-foreground">{gt.description}</p>
-      <div className="rounded border border-border bg-background px-2 py-1 font-mono text-[10px] text-foreground">
+      <p className="mb-2 ui-meta text-muted-foreground">{gt.description}</p>
+      <div className="ui-codeblock">
         <span className="text-danger">{gt.method}</span> <span>{gt.endpoint}</span>
       </div>
-      <p className="mt-2 font-mono text-[10px] italic text-muted-foreground">
+      <p className="mt-2 ui-meta italic text-muted-foreground">
         Hint: {gt.exploit_hint}
       </p>
     </div>
@@ -192,27 +192,27 @@ function FalseNegativeCard({ gt, hadVictimToken }: { gt: GroundTruthEntry; hadVi
 function FalsePositiveCard({ finding }: { finding: TaskResult }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="rounded-md border border-warning/30 bg-card/40 p-3">
+    <div className="ui-panel-muted ui-panel-compact border-warning/30">
       <div className="mb-1 flex flex-wrap items-center gap-1.5">
         <CategoryBadge cat={finding.vuln_category} />
         <SeverityBadge sev={finding.severity} />
       </div>
-      <div className="rounded border border-border bg-background px-2 py-1 font-mono text-[10px] text-foreground">
+      <div className="ui-codeblock">
         <span className="text-warning">{finding.method}</span> <span>{finding.endpoint}</span>
       </div>
-      <p className="mt-2 text-[10px] italic text-muted-foreground">
+      <p className="mt-2 ui-meta italic text-muted-foreground">
         Not in ground truth — may be a real vuln or a hallucination.
       </p>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="mt-2 flex items-center gap-1 font-mono text-[9px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
+        className="mt-2 flex items-center gap-1 ui-label ui-label-xs hover:text-foreground"
       >
         {open ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
         Evidence
       </button>
       {open && (
-        <pre className="mt-2 overflow-x-auto whitespace-pre-wrap rounded border border-border bg-background p-2 font-mono text-[10px] text-foreground">
+        <pre className="mt-2 overflow-x-auto whitespace-pre-wrap ui-codeblock">
           {finding.evidence.response.body_excerpt || "(no body captured)"}
         </pre>
       )}
@@ -222,7 +222,7 @@ function FalsePositiveCard({ finding }: { finding: TaskResult }) {
 
 function CategoryBadge({ cat }: { cat: string }) {
   return (
-    <span className="rounded border border-primary/40 bg-primary/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-primary">
+    <span className="ui-chip ui-chip-xs border-primary/40 bg-primary/10 text-primary">
       {cat}
     </span>
   );
@@ -230,7 +230,7 @@ function CategoryBadge({ cat }: { cat: string }) {
 
 function SeverityBadge({ sev }: { sev: Severity }) {
   return (
-    <span className={cn("rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest", SEVERITY_STYLE[sev])}>
+    <span className={cn("ui-chip ui-chip-xs", SEVERITY_STYLE[sev])}>
       {sev}
     </span>
   );

@@ -41,7 +41,7 @@ export function EmptyState({
       )}
       <div
         className={cn(
-          "font-mono uppercase tracking-widest text-foreground/80",
+          "ui-label text-foreground/80",
           compact ? "text-[11px]" : "text-xs",
         )}
       >

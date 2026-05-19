@@ -23,6 +23,7 @@ class AuthAgent(BaseAgent):
                 reasoning="default API5 strategy: access admin endpoint as regular user",
             )
 
+        from core.payload_factory.exploit_modules.jwt_exploit import _DEFAULT_WEAK_SECRETS
         return AgentDecision(
             task_id=task.task_id,
             chosen_strategies=[
@@ -35,10 +36,8 @@ class AuthAgent(BaseAgent):
                 "test_none_alg": True,
                 "test_missing_header": True,
                 "test_expired_token": True,
-                "weak_secrets": [
-                    "secret", "password", "123456", "admin", "key",
-                    "jwt_secret", "your-256-bit-secret", "changeme", "",
-                ],
+                "weak_secrets": _DEFAULT_WEAK_SECRETS,
+                "auth_token": self._auth_token,
             },
             use_exploit_module="jwt_exploit",
             reasoning="default API2 strategy: JWT manipulation and auth bypass",

@@ -2,10 +2,17 @@
 from __future__ import annotations
 
 import html as _html
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from core.validator.rule_validator import ValidationResult
+
+if TYPE_CHECKING:
+    from core.llm.client import LLMClient
+
+logger = logging.getLogger(__name__)
 
 _CSS = """
 <style>
@@ -42,6 +49,8 @@ class Finding:
     evidence: str
     confirmed_by_slm: bool
     slm_reasoning: str
+    remediation: str = ""
+    references: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -92,6 +101,12 @@ class ReportGenerator:
                 confirmed_by_slm=vr.confirmed_by_slm,
                 slm_reasoning=vr.slm_reasoning,
             ))
+        # Filter known false positives then deduplicate before finalising
+        from core.validator.false_positive_filter import filter_false_positives
+        from core.utils.deduplication import deduplicate_findings
+        findings, _ = filter_false_positives(findings)
+        findings = deduplicate_findings(findings)
+
         return ScanReport(
             scan_id=scan_id,
             target_url=target_url,
@@ -101,6 +116,61 @@ class ReportGenerator:
             total_tasks=len({vr.task_id for vr in validation_results}),
             findings=findings,
         )
+
+    # ── LLM remediation enrichment ────────────────────────────────────────── #
+
+    async def enrich_with_llm_remediation(
+        self,
+        report: ScanReport,
+        llm: LLMClient,
+    ) -> None:
+        """Call the LLM once per unique (vuln_category, endpoint) pair to generate
+        actionable remediation guidance, then write it back into each Finding.
+
+        Skips findings that are not marked vulnerable. Errors are logged and the
+        finding keeps its empty remediation string rather than raising.
+        """
+        from core.llm.prompts import REMEDIATION_PROMPT
+        from core.coordinator.task_builder import OWASP_REFS
+
+        seen: dict[tuple[str, str], tuple[str, list[str]]] = {}
+
+        for finding in report.findings:
+            if not finding.is_vulnerable:
+                continue
+
+            key = (finding.vuln_category, finding.endpoint)
+            if key in seen:
+                finding.remediation, finding.references = seen[key]
+                continue
+
+            parts = finding.endpoint.split(" ", 1)
+            method = parts[0] if len(parts) == 2 else "GET"
+            path = parts[1] if len(parts) == 2 else finding.endpoint
+
+            prompt = REMEDIATION_PROMPT.format(
+                vuln_category=finding.vuln_category,
+                owasp_ref=OWASP_REFS.get(finding.vuln_category, finding.vuln_category),
+                method=method,
+                endpoint=path,
+                evidence_summary=finding.evidence[:400] or "(no evidence details)",
+            )
+            response = await llm.instruct(prompt, task_id=finding.task_id)
+
+            if "error" in response:
+                logger.warning(
+                    "Remediation LLM call failed for %s %s: %s",
+                    finding.vuln_category, finding.endpoint, response["error"],
+                )
+                seen[key] = ("", [])
+            else:
+                remediation = str(response.get("remediation", ""))
+                references = response.get("references", [])
+                if not isinstance(references, list):
+                    references = []
+                finding.remediation = remediation
+                finding.references = [str(r) for r in references]
+                seen[key] = (finding.remediation, finding.references)
 
     # ── Render ────────────────────────────────────────────────────────────── #
 
@@ -134,14 +204,19 @@ class ReportGenerator:
             lines.append("")
             for f in report.findings:
                 if f.is_vulnerable:
-                    lines += [
+                    entry = [
                         f"### {f.vuln_category} — {f.endpoint}",
                         "",
                         f"- **Severity:** {f.severity}",
                         f"- **Rules:** {', '.join(f.rule_ids)}",
                         f"- **Evidence:** {f.evidence}",
-                        "",
                     ]
+                    if f.remediation:
+                        entry.append(f"- **Remediation:** {f.remediation}")
+                    if f.references:
+                        entry.append(f"- **References:** {', '.join(f.references)}")
+                    entry.append("")
+                    lines += entry
         return "\n".join(lines)
 
     def render_html(self, report: ScanReport) -> str:
@@ -153,12 +228,13 @@ class ReportGenerator:
                 f"<tr><td>{e(f.endpoint)}</td><td>{e(f.vuln_category)}</td>"
                 f'<td class="{e(f.severity)}">{e(f.severity.upper())}</td>'
                 f"<td>{e(', '.join(f.rule_ids))}</td>"
-                f"<td>{e(f.evidence[:120])}</td></tr>"
+                f"<td>{e(f.evidence[:120])}</td>"
+                f"<td>{e(f.remediation[:200]) if f.remediation else '—'}</td></tr>"
                 for f in report.findings
             )
             findings_html = (
                 "<table><tr><th>Endpoint</th><th>Category</th>"
-                "<th>Severity</th><th>Rules</th><th>Evidence</th></tr>"
+                "<th>Severity</th><th>Rules</th><th>Evidence</th><th>Remediation</th></tr>"
                 + rows + "</table>"
             )
         return (

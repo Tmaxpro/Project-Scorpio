@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import base64
+from dataclasses import dataclass, field
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -23,6 +25,7 @@ class ScanRequest(BaseModel):
     # Backend-native names
     spec: str = ""
     target_url: str = ""
+    scan_name: str = ""
     auth_token: str = ""
     owasp_filter: list[str] = Field(default_factory=list)
     max_payloads_per_endpoint: int = Field(default=20, ge=1, le=200)
@@ -34,6 +37,12 @@ class ScanRequest(BaseModel):
     auth_type: str = "none"           # bearer | apikey | api_key | basic | none
     credentials: Credentials | None = None
     context: str = ""
+    scan_mode: Literal["fast", "balanced", "thorough"] = "fast"
+
+    # Second user — victim account for BOLA (API1) cross-user tests
+    user2_credentials: Credentials | None = None
+    # Admin account — optional, for API5 function-level auth tests
+    admin_credentials: Credentials | None = None
 
     @model_validator(mode="after")
     def _normalize(self) -> "ScanRequest":
@@ -69,12 +78,14 @@ class ScanStatusResponse(BaseModel):
     progress: float
     message: str
     target: str = ""
+    scan_name: str = ""
     started_at: str = ""
     finished_at: str = ""
     findings_count: int = 0
     vulnerable_count: int = 0
     total_tasks: int = 0
     completed_tasks: int = 0
+    scan_mode: str = "fast"
 
 
 class EvidenceRequest(BaseModel):
@@ -112,9 +123,44 @@ class FindingSummary(BaseModel):
     confirmed_by_slm: bool
 
 
+class ModelUsageEntry(BaseModel):
+    timestamp: str
+    task_id: str
+    model_used: str
+    tokens_in: int
+    tokens_out: int
+    latency_ms: float
+    success: bool
+    fallback_triggered: bool = False
+
 class ScanResultsResponse(BaseModel):
     scan_id: str
     status: str
     total_requests: int
     vulnerable_count: int
     findings: list[FindingSummary]
+    model_usage_log: list[ModelUsageEntry] = Field(default_factory=list)
+
+
+@dataclass
+class ScanSession:
+    """In-memory scan state shared between the router and the database layer."""
+
+    scan_id: str
+    target_url: str = ""
+    scan_name: str = ""
+    status: str = "pending"
+    progress: float = 0.0
+    message: str = "Queued"
+    results: list[Any] = field(default_factory=list)   # list[ValidationResult]
+    report_html: str = ""
+    report_md: str = ""
+    started_at: str = ""
+    finished_at: str = ""
+    error: str = ""
+    total_tasks: int = 0
+    completed_tasks: int = 0
+    scan_mode: str = "fast"
+    # SSE event log — append-only, allows multiple subscribers
+    _events: list[dict[str, Any]] = field(default_factory=list)
+    _done: bool = False

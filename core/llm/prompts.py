@@ -3,10 +3,14 @@
 # ── Coordinator ──────────────────────────────────────────────────────────────
 
 COORDINATOR_PROMPT = """\
-You are a senior REST API security expert planning a penetration test.
+You are an expert REST API security analyst performing a grey-box pentest.
+You have full access to the API specification and the credentials below.
 
-API ENDPOINTS SUMMARY:
+OPENAPI ENDPOINTS ({endpoint_count} total):
 {spec_summary}
+
+CREDENTIALS AVAILABLE:
+{credentials_summary}
 
 OWASP API SECURITY KNOWLEDGE:
 {owasp_rag_context}
@@ -14,19 +18,42 @@ OWASP API SECURITY KNOWLEDGE:
 USER CONTEXT:
 {user_context}
 
-OWASP CATEGORIES TO TEST: {owasp_filter}
+CATEGORIES TO TEST: {owasp_filter}
 
-Generate a prioritized JSON array of test tasks. Each task must have:
-- task_id          (string, format "T-NNN")
-- vuln_category    (one of API1..API10)
-- owasp_ref        (string, e.g. "API1:2023 - BOLA")
-- target_endpoint  (path string)
-- method           (HTTP method, uppercase)
-- strategy         (brief description of the attack approach)
-- rag_context_tags (list of strings for RAG retrieval)
-- priority         (integer: 1=high, 2=medium, 3=low)
+Produce a JSON array of CONCRETE, EXECUTABLE test tasks. Each task must be immediately
+actionable — path placeholders must be replaced with real values.
 
-Output ONLY a valid JSON array. No explanation, no markdown fences.\
+RULES:
+- resolved_test_urls MUST NEVER contain {{param}} — replace every placeholder with a real value
+- Use the credentials above to determine real usernames, IDs, and resource values
+- For API1 (BOLA): attacker_token_key and victim_token_key must be DIFFERENT accounts
+- For API8 (injection): include actual payloads in resolved_test_urls or injection_body
+- Create at least one task per endpoint × applicable OWASP category
+- Aim for at least {min_tasks} tasks total
+
+Each task object schema:
+{{
+  "task_id": "T-001",
+  "vuln_category": "API1",
+  "owasp_ref": "API1:2023 — Broken Object Level Authorization",
+  "target_endpoint": "/books/v1/{{book_title}}",
+  "resolved_test_urls": ["/books/v1/victim-book", "/books/v1/admin-notes"],
+  "method": "GET",
+  "attacker_token_key": "user1_token",
+  "victim_token_key": "user2_token",
+  "valid_body": null,
+  "injection_body": null,
+  "strategy": "User1 tries to access books belonging to user2 by guessing their book titles",
+  "expected_vuln_indicator": "HTTP 200 with book content not belonging to attacker",
+  "expected_safe_indicator": "HTTP 403 or 404",
+  "priority": 1,
+  "requires_victim_resources": true,
+  "resource_discovery_endpoint": "/books/v1",
+  "resource_id_field": "book_title",
+  "rag_context_tags": ["bola", "idor"]
+}}
+
+Output ONLY a valid JSON array. No markdown fences, no explanation.\
 """
 
 # ── Base agent ───────────────────────────────────────────────────────────────
@@ -38,19 +65,39 @@ OWASP KNOWLEDGE:
 {owasp_context}
 
 TARGET ENDPOINT: {method} {endpoint}
+URLS TO TEST:
+{resolved_test_urls}
 
 ENDPOINT DETAILS:
 {endpoint_details}
 
 TASK: {task_strategy}
 
-Decide how to test this endpoint. Output JSON with these exact keys:
+BASELINE RESPONSE (authenticated probe of the first URL above):
+  Status: {baseline_status}
+  Body excerpt: {baseline_body_excerpt}
+
+Based on the baseline, decide your attack strategy. Consider:
+- What does the baseline response reveal about how this endpoint behaves?
+- Does it return data? If so, what fields could indicate a vulnerability?
+- Does it return 401/403? That changes what bypass techniques to try.
+- Are there additional paths worth testing based on what you see?
+
+Output JSON with these exact keys:
 {{
   "task_id": "{task_id}",
   "chosen_strategies": ["strategy1", "strategy2"],
   "payload_config": {{}},
   "use_exploit_module": null,
-  "reasoning": "brief explanation"
+  "additional_test_urls": [],
+  "request_bodies": [],
+  "interpretation_rules": {{
+    "confirmed_if": "describe the exact response condition that confirms vulnerability",
+    "false_positive_if": "describe what to ignore",
+    "stop_if": "describe when to stop testing"
+  }},
+  "confidence_needed": 0.7,
+  "reasoning": "brief explanation of attack approach and what you learned from the baseline"
 }}
 
 Output ONLY the JSON.\

@@ -45,14 +45,14 @@ export function TargetCard({ config, selected, onSelect, onLoadSpec }: TargetCar
             <h3 className="text-xl font-semibold text-foreground">{config.name}</h3>
             <span
               className={cn(
-                "rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest",
+                "ui-chip ui-chip-xs",
                 DIFFICULTY_STYLE[config.difficulty],
               )}
             >
               {config.difficulty}
             </span>
           </div>
-          <p className="mt-0.5 truncate font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          <p className="mt-0.5 truncate ui-label">
             by {config.author}
           </p>
         </div>
@@ -83,7 +83,7 @@ export function TargetCard({ config, selected, onSelect, onLoadSpec }: TargetCar
         {config.owasp_coverage.map((cat) => (
           <span
             key={cat}
-            className="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-muted-foreground"
+            className="ui-chip ui-chip-xs ui-chip-muted"
           >
             {cat}
           </span>
@@ -95,19 +95,19 @@ export function TargetCard({ config, selected, onSelect, onLoadSpec }: TargetCar
         {config.has_secure_mode && (
           <span
             title={config.secure_mode_note}
-            className="inline-flex items-center gap-1 rounded border border-primary/40 bg-primary/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-primary"
+            className="ui-chip ui-chip-xs border-primary/40 bg-primary/10 text-primary"
           >
             <ShieldCheck className="h-3 w-3" />
             Secure mode
           </span>
         )}
         {config.openapi_spec.available ? (
-          <span className="inline-flex items-center gap-1 rounded border border-success/40 bg-success/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-success">
+          <span className="ui-chip ui-chip-xs border-success/40 bg-success/10 text-success">
             <FileText className="h-3 w-3" />
             Official spec
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 rounded border border-warning/40 bg-warning/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-warning">
+          <span className="ui-chip ui-chip-xs border-warning/40 bg-warning/10 text-warning">
             <ShieldQuestion className="h-3 w-3" />
             Spec manual
           </span>
@@ -122,7 +122,7 @@ export function TargetCard({ config, selected, onSelect, onLoadSpec }: TargetCar
             e.stopPropagation();
             onLoadSpec();
           }}
-          className="mb-3 inline-flex w-full items-center justify-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-primary transition-colors hover:bg-primary/20"
+          className="mb-3 inline-flex w-full items-center justify-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 ui-label text-primary transition-colors hover:bg-primary/20"
         >
           <ExternalLink className="h-3 w-3" />
           Load official spec
@@ -136,19 +136,19 @@ export function TargetCard({ config, selected, onSelect, onLoadSpec }: TargetCar
           e.stopPropagation();
           setExpanded((v) => !v);
         }}
-        className="flex w-full items-center justify-between gap-1 rounded-md border border-border bg-card px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
+        className="flex w-full items-center justify-between gap-1 rounded-md border border-border bg-card px-3 py-1.5 ui-label transition-colors hover:bg-surface-hover hover:text-foreground"
       >
         <span>Setup instructions</span>
         {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
       </button>
 
       {expanded && (
-        <div className="mt-3 space-y-2 rounded-md border border-border bg-[oklch(0.08_0.02_260)] p-3">
+        <div className="ui-panel ui-panel-compact mt-3 space-y-2">
           <CodeLine label="Vulnerable mode" code={config.docker_setup.primary} />
           {config.docker_setup.secure_mode && (
             <CodeLine label="Secure mode" code={config.docker_setup.secure_mode} />
           )}
-          <p className="text-[10px] italic text-muted-foreground">
+          <p className="ui-meta italic text-muted-foreground">
             {config.docker_setup.note}
           </p>
         </div>
@@ -166,7 +166,7 @@ function CodeLine({ label, code }: { label: string; code: string }) {
   };
   return (
     <div>
-      <div className="mb-1 font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+      <div className="mb-1 ui-label ui-label-xs">
         {label}
       </div>
       <button
@@ -176,13 +176,11 @@ function CodeLine({ label, code }: { label: string; code: string }) {
           copy();
         }}
         title={copied ? "Copied!" : "Click to copy"}
-        className="block w-full overflow-x-auto rounded border border-border bg-background px-2 py-1.5 text-left font-mono text-[10px] text-foreground hover:bg-surface-hover"
+        className="block w-full overflow-x-auto ui-codeblock text-left hover:bg-surface-hover"
       >
         <code className="whitespace-pre">{code}</code>
         {copied && (
-          <div className="mt-1 font-mono text-[9px] uppercase tracking-widest text-success">
-            ✓ Copied
-          </div>
+          <div className="mt-1 ui-label-xs text-success">✓ Copied</div>
         )}
       </button>
     </div>

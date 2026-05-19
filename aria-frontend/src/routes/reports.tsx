@@ -95,11 +95,11 @@ function ReportsPage() {
                     <div className="truncate font-mono text-sm text-foreground">
                       {s.target}
                     </div>
-                    <div className="font-mono text-[10px] text-muted-foreground">
+                    <div className="ui-meta">
                       {s.scan_id}
                     </div>
                   </div>
-                  <span className="rounded border border-success/40 bg-success/10 px-1.5 py-0.5 font-mono text-[10px] uppercase text-success">
+                  <span className="ui-chip ui-chip-sm border-success/40 bg-success/10 text-success">
                     completed
                   </span>
                 </div>
@@ -123,7 +123,7 @@ function ReportsPage() {
                     </div>
                   </div>
                 </div>
-                <div className="text-[10px] text-muted-foreground">
+                <div className="ui-meta">
                   {s.timestamp ? new Date(s.timestamp).toLocaleString() : "—"}
                 </div>
                 <div className="flex gap-2">
@@ -153,7 +153,7 @@ function ReportsPage() {
           </div>
         )}
         {!loading && scans.length > 0 && (
-          <div className="mt-4 flex items-center gap-2 text-[10px] text-muted-foreground">
+          <div className="mt-4 flex items-center gap-2 ui-meta">
             <Download className="h-3 w-3" />
             Reports are generated server-side at /scan/:id/report
           </div>

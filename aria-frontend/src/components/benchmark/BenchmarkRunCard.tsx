@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, Trash2 } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import type { BenchmarkRun } from "@/lib/types";
-import { deleteBenchmarkRunLocal } from "@/lib/api";
+import { deleteBenchmarkRun } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 interface BenchmarkRunCardProps {
@@ -29,27 +30,39 @@ function f1Color(f1: number): string {
 }
 
 export function BenchmarkRunCard({ run, onDeleted }: BenchmarkRunCardProps) {
+  const navigate = useNavigate();
   const totalFound = run.results.reduce((s, r) => s + r.true_positives, 0);
   const totalGT = run.summary.total_ground_truth;
   const coveragePct = totalGT > 0 ? (totalFound / totalGT) * 100 : 0;
 
-  const handleDelete = (e: React.MouseEvent) => {
+  const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
     if (window.confirm(`Delete this benchmark run for ${run.target_name}?`)) {
-      deleteBenchmarkRunLocal(run.run_id);
+      await deleteBenchmarkRun(run.run_id);
       onDeleted?.();
     }
   };
 
+  const handleGoToScan = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (run.scan_id) {
+      navigate({ to: "/scan/$id", params: { id: run.scan_id } });
+    }
+  };
+
+  const handleCardClick = () => {
+    navigate({ to: "/benchmarks/$runId", params: { runId: run.run_id } });
+  };
+
   return (
-    <Link
-      to="/benchmarks/$runId"
-      params={{ runId: run.run_id }}
-      className="glass flex items-center gap-4 rounded-lg border border-border p-4 transition-colors hover:border-primary/40"
+    <div
+      onClick={handleCardClick}
+      className="glass flex items-center gap-4 rounded-lg border border-border p-4 transition-colors hover:border-primary/40 cursor-pointer"
     >
       {/* Date column */}
-      <div className="w-28 shrink-0 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+      <div className="w-28 shrink-0 ui-label">
         {new Date(run.timestamp).toLocaleDateString()}
       </div>
 
@@ -59,7 +72,7 @@ export function BenchmarkRunCard({ run, onDeleted }: BenchmarkRunCardProps) {
           <span className="font-mono text-xs text-foreground">{run.target_name}</span>
           <span
             className={cn(
-              "rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest",
+              "ui-chip ui-chip-xs",
               DIFFICULTY_BADGE[run.target],
             )}
           >
@@ -72,12 +85,12 @@ export function BenchmarkRunCard({ run, onDeleted }: BenchmarkRunCardProps) {
       <div className="w-40 shrink-0">
         <div className="flex flex-wrap gap-1">
           {run.results.length === 0 ? (
-            <span className="font-mono text-[10px] text-muted-foreground">—</span>
+            <span className="ui-meta text-muted-foreground">—</span>
           ) : (
             run.results.map((r) => (
               <span
                 key={r.model}
-                className="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-muted-foreground"
+                className="ui-chip ui-chip-xs ui-chip-muted"
               >
                 {r.model.replace("foundation-sec-", "F-Sec-").replace("qwen2.5", "Qwen2.5")}
               </span>
@@ -88,7 +101,7 @@ export function BenchmarkRunCard({ run, onDeleted }: BenchmarkRunCardProps) {
 
       {/* Best F1 column */}
       <div className="w-24 shrink-0 text-center">
-        <div className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+        <div className="ui-label ui-label-xs">
           Best F1
         </div>
         <div className={cn("font-mono text-lg tabular-nums", f1Color(run.summary.best_f1))}>
@@ -99,10 +112,10 @@ export function BenchmarkRunCard({ run, onDeleted }: BenchmarkRunCardProps) {
       {/* Coverage column */}
       <div className="min-w-0 flex-1">
         <div className="mb-1 flex items-center justify-between gap-2">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          <span className="ui-label">
             Coverage
           </span>
-          <span className="font-mono text-[10px] tabular-nums text-foreground">
+          <span className="ui-meta tabular-nums text-foreground">
             {totalFound}/{totalGT}
           </span>
         </div>
@@ -118,7 +131,7 @@ export function BenchmarkRunCard({ run, onDeleted }: BenchmarkRunCardProps) {
       <div className="w-24 shrink-0 text-center">
         <span
           className={cn(
-            "inline-block rounded border px-2 py-0.5 font-mono text-[9px] uppercase tracking-widest",
+            "ui-chip ui-chip-xs",
             STATUS_BADGE[run.status],
           )}
         >
@@ -136,8 +149,15 @@ export function BenchmarkRunCard({ run, onDeleted }: BenchmarkRunCardProps) {
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
-        <ArrowRight className="h-4 w-4 text-muted-foreground" />
+        <button
+          type="button"
+          onClick={handleGoToScan}
+          aria-label="View raw scan"
+          className="rounded p-1.5 text-muted-foreground hover:bg-surface-hover/60 hover:text-primary"
+        >
+          <ArrowRight className="h-4 w-4" />
+        </button>
       </div>
-    </Link>
+    </div>
   );
 }

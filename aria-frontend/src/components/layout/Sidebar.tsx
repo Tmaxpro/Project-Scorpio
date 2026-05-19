@@ -9,7 +9,7 @@ import {
   Settings,
   Zap,
 } from "lucide-react";
-import { checkHealth, getModelsConfig, listBenchmarkRunsLocal } from "@/lib/api";
+import { checkHealth, getModelsConfig, listBenchmarkRuns } from "@/lib/api";
 import type { ModelsResponse } from "@/lib/types";
 import { MODEL_ROLE_META } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -35,10 +35,14 @@ export function Sidebar() {
       const ok = await checkHealth();
       if (mounted) setOnline(ok);
     };
-    const refreshBenchmarks = () => {
+    const refreshBenchmarks = async () => {
       if (!mounted) return;
-      const runs = listBenchmarkRunsLocal();
-      setBenchmarkCount(runs.filter((r) => r.status === "completed").length);
+      try {
+        const runs = await listBenchmarkRuns();
+        if (mounted) setBenchmarkCount(runs.filter((r) => r.status === "completed").length);
+      } catch {
+        // Backend may be offline
+      }
     };
     const refreshModels = async () => {
       if (!mounted) return;
@@ -98,7 +102,7 @@ export function Sidebar() {
             <div className="font-mono text-base font-bold tracking-tight text-primary">
               ARIA
             </div>
-            <div className="truncate text-[10px] uppercase tracking-widest text-muted-foreground">
+            <div className="truncate ui-label">
               API Security Agent
             </div>
           </div>
@@ -139,12 +143,12 @@ export function Sidebar() {
                   )}
                   <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
                   {!collapsed && (
-                    <span className="truncate text-xs uppercase tracking-wider">
+                    <span className="truncate ui-label ui-label-xs">
                       {label}
                     </span>
                   )}
                   {showBadge && !collapsed && (
-                    <span className="ml-auto rounded-full bg-card px-2 py-0.5 font-mono text-[9px] tabular-nums text-muted-foreground">
+                    <span className="ml-auto ui-chip ui-chip-xs ui-chip-pill ui-chip-muted tabular-nums">
                       {benchmarkCount}
                     </span>
                   )}
@@ -162,10 +166,10 @@ export function Sidebar() {
       <div className="border-t border-border px-3 py-3">
         {!collapsed && (
           <div className="mb-3 space-y-1">
-            <div className="text-[9px] uppercase tracking-widest text-muted-foreground">
+            <div className="ui-label ui-label-xs">
               Active Models
             </div>
-            <div className="space-y-0.5 font-mono text-[10px] text-foreground/80">
+            <div className="space-y-0.5 ui-meta text-foreground/80">
               {modelsConfig ? (
                 ROLE_ORDER.map((role) => {
                   const model = modelsConfig.models[role];
@@ -182,7 +186,7 @@ export function Sidebar() {
                 <>
                   <div className="flex items-center gap-1.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-border animate-pulse" />
-                    <span className="text-muted-foreground/50">Loading...</span>
+                    <span className="ui-label ui-label-xs text-muted-foreground/50">Loading...</span>
                   </div>
                 </>
               )}

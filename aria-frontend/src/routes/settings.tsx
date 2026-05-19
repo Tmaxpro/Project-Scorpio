@@ -208,7 +208,7 @@ function SettingsPage() {
           type="button"
           onClick={() => { fetchConfig(); fetchModels(); }}
           disabled={loading}
-          className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 ui-label text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground disabled:opacity-50"
         >
           <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
           Refresh
@@ -220,18 +220,18 @@ function SettingsPage() {
         <div className="mb-8 flex flex-wrap items-center gap-4 rounded-lg border border-border bg-card/50 px-4 py-3">
           <div className="flex items-center gap-2">
             <Server className="h-4 w-4 text-muted-foreground" />
-            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Provider</span>
+            <span className="ui-label">Provider</span>
             <span className="font-mono text-xs font-medium text-foreground">{config.provider}</span>
           </div>
           <div className="h-4 w-px bg-border" />
           <div className="flex items-center gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Endpoint</span>
+            <span className="ui-label">Endpoint</span>
             <span className="font-mono text-xs text-foreground">{config.base_url}</span>
           </div>
           <div className="h-4 w-px bg-border" />
           <div className="flex items-center gap-2">
             <RefreshCw className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Max Retries</span>
+            <span className="ui-label">Max Retries</span>
             <span className="font-mono text-xs font-medium text-foreground">{config.max_retries}</span>
           </div>
         </div>
@@ -246,7 +246,7 @@ function SettingsPage() {
           <button
             type="button"
             onClick={fetchConfig}
-            className="mt-4 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 font-mono text-[10px] uppercase tracking-widest text-primary-foreground hover:opacity-90"
+            className="mt-4 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 ui-label text-primary-foreground hover:opacity-90"
           >
             <RefreshCw className="h-3.5 w-3.5" /> Retry
           </button>
@@ -257,7 +257,7 @@ function SettingsPage() {
       <section className="mb-10">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h2 className="font-mono text-sm font-semibold uppercase tracking-widest text-foreground">
+            <h2 className="text-sm font-semibold text-foreground">
               Available Ollama Models
             </h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
@@ -267,12 +267,12 @@ function SettingsPage() {
           {!loadingModels && (
             <div className="flex items-center gap-2">
               {running.length > 0 && (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-2.5 py-0.5 font-mono text-[10px] text-success">
+                <span className="ui-chip ui-chip-sm ui-chip-pill border-success/30 bg-success/10 text-success">
                   <Zap className="h-3 w-3" />
                   {running.length} in VRAM
                 </span>
               )}
-              <span className="rounded-full border border-border bg-card px-2.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+              <span className="ui-chip ui-chip-sm ui-chip-pill ui-chip-muted">
                 {available.length} pulled
               </span>
             </div>
@@ -340,7 +340,7 @@ function SettingsPage() {
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
                       {ri && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-widest text-success">
+                        <span className="ui-chip ui-chip-xs ui-chip-pill bg-success/15 text-success font-bold">
                           <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
                           in VRAM
                         </span>
@@ -348,7 +348,7 @@ function SettingsPage() {
                       {assignedRole && meta && (
                         <span
                           className={cn(
-                            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-widest",
+                            "ui-chip ui-chip-xs ui-chip-pill font-bold",
                             colorMap[meta.color].badge,
                           )}
                         >
@@ -360,7 +360,7 @@ function SettingsPage() {
                   </div>
 
                   {m.name !== shortName(m.name) && (
-                    <span className="truncate font-mono text-[10px] text-muted-foreground/50" title={m.name}>
+                    <span className="truncate ui-meta text-muted-foreground/50" title={m.name}>
                       {m.name}
                     </span>
                   )}
@@ -368,22 +368,22 @@ function SettingsPage() {
                   {/* Tags */}
                   <div className="flex flex-wrap gap-2">
                     {m.parameter_size && (
-                      <span className="rounded border border-border bg-card px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+                      <span className="ui-chip ui-chip-sm ui-chip-muted">
                         {m.parameter_size}
                       </span>
                     )}
                     {m.quantization && (
-                      <span className="rounded border border-border bg-card px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+                      <span className="ui-chip ui-chip-sm ui-chip-muted">
                         {m.quantization}
                       </span>
                     )}
                     {m.size && (
-                      <span className="rounded border border-border bg-card px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+                      <span className="ui-chip ui-chip-sm ui-chip-muted">
                         {m.size}
                       </span>
                     )}
                     {ri && (
-                      <span className="inline-flex items-center gap-1 rounded border border-success/30 bg-success/10 px-2 py-0.5 font-mono text-[10px] text-success">
+                      <span className="ui-chip ui-chip-sm border-success/30 bg-success/10 text-success">
                         <MemoryStick className="h-3 w-3" />
                         {ri.size_vram} VRAM
                       </span>
@@ -396,7 +396,7 @@ function SettingsPage() {
                       type="button"
                       onClick={() => handleUnload(m.name)}
                       disabled={isUnloading}
-                      className="mt-auto inline-flex items-center justify-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-warning transition-colors hover:bg-warning/20 disabled:opacity-50"
+                      className="mt-auto inline-flex items-center justify-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-1.5 ui-label text-warning transition-colors hover:bg-warning/20 disabled:opacity-50"
                     >
                       {isUnloading
                         ? <><Loader2 className="h-3 w-3 animate-spin" />Unloading…</>
@@ -415,7 +415,7 @@ function SettingsPage() {
       {config && !configError && (
         <section>
           <div className="mb-4">
-            <h2 className="font-mono text-sm font-semibold uppercase tracking-widest text-foreground">
+            <h2 className="text-sm font-semibold text-foreground">
               Role Assignment
             </h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
@@ -448,7 +448,7 @@ function SettingsPage() {
                       <div className="flex items-center gap-2">
                         <span
                           className={cn(
-                            "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-widest",
+                            "ui-chip ui-chip-sm ui-chip-pill font-bold",
                             colors.badge,
                           )}
                         >
@@ -456,7 +456,7 @@ function SettingsPage() {
                           {meta.label}
                         </span>
                         {dirty && (
-                          <span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 font-mono text-[9px] text-warning">
+                          <span className="ui-chip ui-chip-xs ui-chip-pill border-warning/40 bg-warning/10 text-warning">
                             unsaved changes
                           </span>
                         )}
@@ -470,7 +470,7 @@ function SettingsPage() {
                     <div className="space-y-4">
                       {/* Model select */}
                       <div className="space-y-1.5">
-                        <label className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                        <label className="flex items-center gap-1.5 ui-label">
                           <HardDrive className="h-3 w-3" />
                           Model
                         </label>
@@ -480,7 +480,7 @@ function SettingsPage() {
                             onChange={(e) =>
                               setDrafts((d) => ({ ...d, [role]: { ...d[role], name: e.target.value } }))
                             }
-                            className="w-full cursor-pointer rounded-md border border-border bg-[oklch(0.12_0.02_260)] px-3 py-2 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary"
+                            className="w-full cursor-pointer rounded-md border border-border bg-card px-3 py-2 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary"
                           >
                             {/* Keep current value in list even if not in Ollama */}
                             {!available.some((m) => m.name === draft.name) && (
@@ -503,7 +503,7 @@ function SettingsPage() {
                               setDrafts((d) => ({ ...d, [role]: { ...d[role], name: e.target.value } }))
                             }
                             placeholder="model name (e.g. qwen2.5:7b)"
-                            className="w-full rounded-md border border-border bg-[oklch(0.12_0.02_260)] px-3 py-2 font-mono text-sm text-foreground outline-none placeholder:text-muted-foreground/40 focus:border-primary"
+                            className="w-full rounded-md border border-border bg-card px-3 py-2 font-mono text-sm text-foreground outline-none placeholder:text-muted-foreground/40 focus:border-primary"
                           />
                         )}
                       </div>
@@ -512,7 +512,7 @@ function SettingsPage() {
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1.5">
                           <label className="flex items-center justify-between">
-                            <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                            <span className="flex items-center gap-1.5 ui-label">
                               <Thermometer className="h-3 w-3" />
                               Temp
                             </span>
@@ -537,7 +537,7 @@ function SettingsPage() {
                         </div>
                         <div className="space-y-1.5">
                           <label className="flex items-center justify-between">
-                            <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                            <span className="flex items-center gap-1.5 ui-label">
                               <Hash className="h-3 w-3" />
                               Tokens
                             </span>
@@ -569,7 +569,7 @@ function SettingsPage() {
                           {draft.use_for.map((u) => (
                             <span
                               key={u}
-                              className="rounded-full border border-border bg-card px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground"
+                              className="ui-chip ui-chip-xs ui-chip-pill ui-chip-muted"
                             >
                               {u}
                             </span>
@@ -593,7 +593,7 @@ function SettingsPage() {
                         onClick={() => handleSaveRole(role)}
                         disabled={!dirty || ss === "saving" || ss === "saved"}
                         className={cn(
-                          "inline-flex h-10 items-center gap-2 rounded-md px-4 font-mono text-[10px] uppercase tracking-widest transition-all",
+                          "inline-flex h-10 items-center gap-2 rounded-md px-4 ui-label transition-all",
                           dirty && ss === "idle"
                             ? "bg-primary text-primary-foreground hover:opacity-90 glow-cyan"
                             : ss === "saved"

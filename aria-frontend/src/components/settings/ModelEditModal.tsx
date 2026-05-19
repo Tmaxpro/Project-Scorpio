@@ -92,7 +92,7 @@ export function ModelEditModal({ role, current, onClose, onSaved }: ModelEditMod
             <div className="flex items-center gap-3">
               <span
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-widest",
+                  "ui-chip ui-chip-sm ui-chip-pill font-bold",
                   badgeBgMap[meta.color],
                 )}
               >
@@ -115,13 +115,13 @@ export function ModelEditModal({ role, current, onClose, onSaved }: ModelEditMod
           <div className="space-y-5 px-5 py-5">
             {/* Model Selector */}
             <div className="space-y-2">
-              <label className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              <label className="flex items-center gap-2 ui-label">
                 <HardDrive className="h-3 w-3" />
                 Model
               </label>
 
               {loadingModels ? (
-                <div className="flex items-center gap-2 rounded-md border border-border bg-[oklch(0.12_0.02_260)] px-3 py-2.5 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2.5 text-sm text-muted-foreground">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   Loading Ollama models...
                 </div>
@@ -136,7 +136,7 @@ export function ModelEditModal({ role, current, onClose, onSaved }: ModelEditMod
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Enter model name manually"
-                    className="w-full rounded-md border border-border bg-[oklch(0.12_0.02_260)] px-3 py-2 font-mono text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary"
+                    className="w-full rounded-md border border-border bg-card px-3 py-2 font-mono text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary"
                   />
                 </div>
               ) : (
@@ -144,7 +144,7 @@ export function ModelEditModal({ role, current, onClose, onSaved }: ModelEditMod
                   <select
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full cursor-pointer rounded-md border border-border bg-[oklch(0.12_0.02_260)] px-3 py-2.5 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary"
+                    className="w-full cursor-pointer rounded-md border border-border bg-card px-3 py-2.5 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary"
                   >
                     {/* Keep current value as option even if not in the list */}
                     {!available.some((m) => m.name === name) && (
@@ -158,7 +158,7 @@ export function ModelEditModal({ role, current, onClose, onSaved }: ModelEditMod
                       </option>
                     ))}
                   </select>
-                  <div className="font-mono text-[10px] text-muted-foreground/60">
+                  <div className="ui-meta text-muted-foreground/60">
                     {available.length} model{available.length !== 1 ? "s" : ""} available on Ollama
                   </div>
                 </div>
@@ -168,7 +168,7 @@ export function ModelEditModal({ role, current, onClose, onSaved }: ModelEditMod
             {/* Temperature Slider */}
             <div className="space-y-2">
               <label className="flex items-center justify-between">
-                <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                <span className="ui-label">
                   Temperature
                 </span>
                 <span className="font-mono text-xs tabular-nums text-foreground">
@@ -184,7 +184,7 @@ export function ModelEditModal({ role, current, onClose, onSaved }: ModelEditMod
                 onChange={(e) => setTemperature(parseFloat(e.target.value))}
                 className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-border outline-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-125"
               />
-              <div className="flex justify-between font-mono text-[9px] text-muted-foreground/50">
+              <div className="flex justify-between ui-meta ui-meta-xs text-muted-foreground/50">
                 <span>Precise</span>
                 <span>Creative</span>
               </div>
@@ -193,7 +193,7 @@ export function ModelEditModal({ role, current, onClose, onSaved }: ModelEditMod
             {/* Max Tokens */}
             <div className="space-y-2">
               <label className="flex items-center justify-between">
-                <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                <span className="ui-label">
                   Max Tokens
                 </span>
                 <span className="font-mono text-xs tabular-nums text-foreground">
@@ -209,7 +209,7 @@ export function ModelEditModal({ role, current, onClose, onSaved }: ModelEditMod
                 onChange={(e) => setMaxTokens(parseInt(e.target.value))}
                 className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-border outline-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-125"
               />
-              <div className="flex justify-between font-mono text-[9px] text-muted-foreground/50">
+              <div className="flex justify-between ui-meta ui-meta-xs text-muted-foreground/50">
                 <span>128</span>
                 <span>16,384</span>
               </div>
@@ -229,7 +229,7 @@ export function ModelEditModal({ role, current, onClose, onSaved }: ModelEditMod
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md border border-border bg-card px-4 py-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
+              className="rounded-md border border-border bg-card px-4 py-2 ui-label text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
             >
               Cancel
             </button>
@@ -238,7 +238,7 @@ export function ModelEditModal({ role, current, onClose, onSaved }: ModelEditMod
               onClick={handleSave}
               disabled={!hasChanges || saving || saved}
               className={cn(
-                "inline-flex items-center gap-2 rounded-md px-4 py-2 font-mono text-[10px] uppercase tracking-widest transition-all",
+                "inline-flex items-center gap-2 rounded-md px-4 py-2 ui-label transition-all",
                 hasChanges && !saving && !saved
                   ? "bg-primary text-primary-foreground hover:opacity-90 glow-cyan"
                   : "cursor-not-allowed bg-muted text-muted-foreground",

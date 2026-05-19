@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
+from typing import Any
 
 from core.coordinator.task_builder import OWASP_REFS, Task
 from core.llm.client import LLMClient
@@ -18,16 +20,27 @@ from core.rag.owasp_rag import OWASPRag
 
 logger = logging.getLogger(__name__)
 
+_PLACEHOLDER_RE = re.compile(r"\{[^}]+\}")
+
 
 @dataclass
 class AgentDecision:
-    """The agent's analysis output — consumed by the PayloadFactory."""
+    """The agent's analysis output — consumed by the PayloadFactory and scan runner."""
 
     task_id: str
     chosen_strategies: list[str]
     payload_config: dict
     use_exploit_module: str | None
     reasoning: str
+
+    # Phase 2 — contextual fields produced when the agent sees the baseline response.
+    # additional_test_urls: extra concrete paths to probe (never contain {placeholder}).
+    # request_bodies: extra request bodies to try on each resolved URL.
+    # interpretation_rules: conditions used by the validator to confirm a finding.
+    additional_test_urls: list[str] = field(default_factory=list)
+    request_bodies: list[dict] = field(default_factory=list)
+    interpretation_rules: dict = field(default_factory=dict)
+    confidence_needed: float = 0.7
 
 
 class BaseAgent:
@@ -42,13 +55,43 @@ class BaseAgent:
     def __init__(self, llm: LLMClient, rag: OWASPRag) -> None:
         self._llm = llm
         self._rag = rag
+        self._auth_token: str = ""
+
+    def set_auth_token(self, token: str) -> None:
+        """Provide the current session token so JWT exploit modules can forge from it."""
+        self._auth_token = token
 
     # ── Public API ──────────────────────────────────────────────────────── #
 
-    def build_system_prompt(self, task: Task, endpoint: EnrichedEndpoint) -> str:
-        """Build an OWASP-context-enriched system prompt for this task."""
+    def build_system_prompt(
+        self,
+        task: Task,
+        endpoint: EnrichedEndpoint,
+        baseline_result: Any | None = None,
+    ) -> str:
+        """Build an OWASP-context-enriched system prompt for this task.
+
+        When *baseline_result* (a ScanResult) is provided, its status code and
+        body excerpt are embedded so the reasoning model can adapt its strategy
+        based on what the API actually returns for this endpoint.
+        """
         owasp_context = self._fetch_rag_context(task)
         endpoint_details = self._format_endpoint_details(endpoint)
+
+        resolved_urls = getattr(task, "resolved_test_urls", [])
+        urls_str = (
+            "\n".join(f"  - {u}" for u in resolved_urls[:5])
+            if resolved_urls
+            else "  (none — uses template path)"
+        )
+
+        if baseline_result is not None and not getattr(baseline_result, "error", None):
+            baseline_status = str(getattr(baseline_result, "status_code", "N/A"))
+            raw_body = getattr(baseline_result, "response_body", "") or ""
+            baseline_body = raw_body[:300] if raw_body else "(empty body)"
+        else:
+            baseline_status = "N/A (no baseline sent)"
+            baseline_body = "N/A"
 
         return AGENT_SYSTEM_PROMPT.format(
             owasp_category=self.OWASP_CATEGORY or task.vuln_category,
@@ -62,15 +105,35 @@ class BaseAgent:
             endpoint_details=endpoint_details,
             task_strategy=task.strategy,
             task_id=task.task_id,
+            resolved_test_urls=urls_str,
+            baseline_status=baseline_status,
+            baseline_body_excerpt=baseline_body,
         )
 
-    async def analyze(self, task: Task, endpoint: EnrichedEndpoint) -> AgentDecision:
+    async def analyze(
+        self,
+        task: Task,
+        endpoint: EnrichedEndpoint,
+        baseline_result: Any | None = None,
+    ) -> AgentDecision:
         """Ask the reasoning model what to do for this task.
 
-        Parses the JSON response into an AgentDecision; falls back to
-        ``get_default_decision()`` on any parse or validation failure.
+        Short-circuits to get_default_decision() when the scan mode does not
+        require LLM agent decisions (fast mode). Falls back on parse failure.
+
+        Args:
+            baseline_result: ScanResult from the first probe of the target URL.
+                Sent before this call so the agent can see the API's real response
+                and adapt its strategy accordingly.
         """
-        prompt = self.build_system_prompt(task, endpoint)
+        if not self._llm.should_use_llm_for_agents(task.priority):
+            logger.debug(
+                "Agent %s skipping LLM for task %s — using rule-based defaults.",
+                self.OWASP_CATEGORY, task.task_id,
+            )
+            return self.get_default_decision(task)
+
+        prompt = self.build_system_prompt(task, endpoint, baseline_result)
         result = await self._llm.reason(prompt, task_id=task.task_id)
 
         if "error" in result:
@@ -82,16 +145,16 @@ class BaseAgent:
             return self.get_default_decision(task)
 
         try:
-            decision = AgentDecision(
-                task_id=str(result.get("task_id", task.task_id)),
-                chosen_strategies=result.get("chosen_strategies") or [task.strategy],
-                payload_config=result.get("payload_config") or {},
-                use_exploit_module=result.get("use_exploit_module"),
-                reasoning=str(result.get("reasoning", "")),
+            decision = self._parse_decision(result, task)
+            logger.info(
+                "Agent %s [%s] strategies=%s module=%s rules=%s additional_urls=%s",
+                self.OWASP_CATEGORY,
+                task.task_id,
+                decision.chosen_strategies,
+                decision.use_exploit_module,
+                list(decision.interpretation_rules.keys()),
+                decision.additional_test_urls,
             )
-            # Validate chosen_strategies is a non-empty list of strings
-            if not isinstance(decision.chosen_strategies, list) or not decision.chosen_strategies:
-                decision.chosen_strategies = [task.strategy]
             return decision
         except Exception as exc:  # noqa: BLE001
             logger.warning(
@@ -116,6 +179,47 @@ class BaseAgent:
         )
 
     # ── Internal helpers ───────────────────────────────────────────────── #
+
+    def _parse_decision(self, result: dict, task: Task) -> AgentDecision:
+        """Parse an LLM response dict into a validated AgentDecision."""
+        chosen = result.get("chosen_strategies") or [task.strategy]
+        if not isinstance(chosen, list) or not chosen:
+            chosen = [task.strategy]
+
+        # Phase 2 fields — parse defensively
+        additional_urls = result.get("additional_test_urls", [])
+        if not isinstance(additional_urls, list):
+            additional_urls = []
+        additional_urls = [
+            str(u) for u in additional_urls
+            if isinstance(u, str) and not _PLACEHOLDER_RE.search(u)
+        ]
+
+        request_bodies = result.get("request_bodies", [])
+        if not isinstance(request_bodies, list):
+            request_bodies = []
+        request_bodies = [b for b in request_bodies if isinstance(b, dict)]
+
+        interp = result.get("interpretation_rules", {})
+        if not isinstance(interp, dict):
+            interp = {}
+
+        try:
+            confidence = float(result.get("confidence_needed", 0.7))
+        except (TypeError, ValueError):
+            confidence = 0.7
+
+        return AgentDecision(
+            task_id=str(result.get("task_id", task.task_id)),
+            chosen_strategies=chosen,
+            payload_config=result.get("payload_config") or {},
+            use_exploit_module=result.get("use_exploit_module"),
+            reasoning=str(result.get("reasoning", "")),
+            additional_test_urls=additional_urls,
+            request_bodies=request_bodies,
+            interpretation_rules=interp,
+            confidence_needed=confidence,
+        )
 
     def _fetch_rag_context(self, task: Task) -> str:
         """Pull the top-3 OWASP knowledge chunks relevant to this task."""

@@ -31,7 +31,7 @@ function ScanDashboardPage() {
           <>
             <span
               className={cn(
-                "flex items-center gap-1.5 font-mono text-xs uppercase tracking-widest",
+                "flex items-center gap-1.5 ui-label",
                 statusColor,
               )}
             >
@@ -52,7 +52,7 @@ function ScanDashboardPage() {
           </>
         }
       />
-      <PageContainer>
+      <PageContainer className="flex h-[calc(100vh-56px)] flex-col overflow-hidden pb-6">
         <ScanDashboard scanId={id} />
       </PageContainer>
     </>

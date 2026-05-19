@@ -10,12 +10,15 @@ import json
 import logging
 import re
 import time
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import yaml
 import ollama
+
+_EventCB = Callable[[str, dict], Awaitable[None]]
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +45,7 @@ class LLMClient:
         self,
         config_path: str = "config.yaml",
         scan_id: str | None = None,
+        scan_mode: str | None = None,
     ) -> None:
         with open(config_path) as fh:
             cfg = yaml.safe_load(fh)
@@ -75,9 +79,14 @@ class LLMClient:
 
         self.scan_id: str | None = scan_id
         self._usage_log: list[dict] = []
+        self._event_cb: _EventCB | None = None
 
         bench = cfg.get("benchmarking", {})
         self._log_dir = Path(bench.get("log_path", "./benchmarks/runs/"))
+
+        scan_cfg = cfg.get("scan", {})
+        self._scan_mode: str = scan_mode or scan_cfg.get("mode", "fast")
+        self._scan_modes: dict = scan_cfg.get("modes", {})
 
     # ── Public API ────────────────────────────────────────────────────────── #
 
@@ -136,11 +145,37 @@ class LLMClient:
         """Attach a scan ID so usage is appended to benchmarks/runs/{scan_id}.jsonl."""
         self.scan_id = scan_id
 
+    def set_event_cb(self, cb: _EventCB) -> None:
+        """Wire an SSE emitter so LLM calls appear in the live scan log."""
+        self._event_cb = cb
+
+    def should_use_llm_for_agents(self, task_priority: int = 2) -> bool:
+        """Return True if the current scan mode calls for LLM agent decisions."""
+        agents_llm = self._scan_modes.get(self._scan_mode, {}).get("agents_use_llm", False)
+        if agents_llm is False:
+            return False
+        if agents_llm is True:
+            return True
+        if agents_llm == "priority_only":
+            return task_priority == 1
+        return False
+
+    def should_use_llm_for_validator(self) -> bool:
+        """Return True if the current scan mode calls for SLM validation."""
+        return bool(self._scan_modes.get(self._scan_mode, {}).get("validator_uses_llm", False))
+
     def get_usage_log(self) -> list[dict]:
         """Return a copy of the in-memory usage log accumulated by this instance."""
         return list(self._usage_log)
 
     # ── Internal ──────────────────────────────────────────────────────────── #
+
+    async def _emit_llm(self, data: dict) -> None:
+        if self._event_cb:
+            try:
+                await self._event_cb("llm_call", data)
+            except Exception:  # noqa: BLE001
+                pass
 
     async def _dispatch(
         self,
@@ -161,6 +196,8 @@ class LLMClient:
         full_prompt = self._build_prompt(prompt, context)
         json_fails = 0
 
+        await self._emit_llm({"status": "calling", "model": model, "task_id": task_id, "phase": task_type})
+
         for attempt in range(self._max_retries):
             t0 = time.monotonic()
             try:
@@ -180,6 +217,11 @@ class LLMClient:
                 parsed = self._parse_json(content)
                 if parsed is not None:
                     self._record(task_id, model, task_type, tokens_in, tokens_out, elapsed, True)
+                    await self._emit_llm({
+                        "status": "done", "model": model, "task_id": task_id,
+                        "phase": task_type, "elapsed_ms": round(elapsed),
+                        "tokens_in": tokens_in, "tokens_out": tokens_out,
+                    })
                     return parsed
 
                 json_fails += 1
@@ -197,6 +239,11 @@ class LLMClient:
                         "Escalating to fallback after %d JSON failures. task=%s primary=%s",
                         json_fails, task_id, model,
                     )
+                    await self._emit_llm({
+                        "status": "fallback", "model": model, "task_id": task_id,
+                        "phase": task_type, "fallback_to": self._fallback_model,
+                        "reason": f"{json_fails} JSON parse failures",
+                    })
                     return await self.fallback(prompt, context, task_id)
 
             except Exception as exc:  # noqa: BLE001
@@ -206,12 +253,21 @@ class LLMClient:
                     "LLM call error (attempt %d/%d) task=%s model=%s: %s",
                     attempt + 1, self._max_retries, task_id, model, exc,
                 )
+                await self._emit_llm({
+                    "status": "error", "model": model, "task_id": task_id,
+                    "phase": task_type, "elapsed_ms": round(elapsed), "error": str(exc),
+                })
 
         if allow_fallback:
             logger.warning(
                 "All %d attempts exhausted; escalating to fallback. task=%s model=%s",
                 self._max_retries, task_id, model,
             )
+            await self._emit_llm({
+                "status": "fallback", "model": model, "task_id": task_id,
+                "phase": task_type, "fallback_to": self._fallback_model,
+                "reason": "all attempts exhausted",
+            })
             return await self.fallback(prompt, context, task_id)
 
         return {"error": f"All attempts failed for task '{task_id}' using {model}"}

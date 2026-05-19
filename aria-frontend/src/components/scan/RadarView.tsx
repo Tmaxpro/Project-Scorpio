@@ -47,7 +47,7 @@ export function RadarView({ findings, progress }: RadarViewProps) {
   return (
     <div className="glass relative flex flex-col items-center justify-center rounded-lg p-6">
       <div className="mb-2 flex w-full items-center justify-between">
-        <h3 className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+        <h3 className="ui-label">
           Threat Radar
         </h3>
         <span className="font-mono text-xs text-cyan">
