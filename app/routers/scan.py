@@ -124,6 +124,15 @@ async def _run_scan(session: ScanSession, request: ScanRequest) -> None:
             started_at=session.started_at,
             finished_at=session.finished_at,
         )
+        if report.vulnerable_count > 0:
+            from core.llm.client import LLMClient
+            llm_report = LLMClient(
+                config_path="config.yaml",
+                scan_id=session.scan_id,
+                scan_mode=request.scan_mode,
+            )
+            llm_report.set_event_cb(_event_cb)
+            await gen.enrich_with_llm_remediation(report, llm_report)
         session.report_html = gen.render_html(report)
         session.report_md = gen.render_markdown(report)
         session.status = "completed"

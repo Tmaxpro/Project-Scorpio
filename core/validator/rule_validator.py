@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
 from core.http_engine.client import ScanResult
 
@@ -29,6 +30,13 @@ _NOSQL_ERROR_RE = re.compile(
     re.IGNORECASE,
 )
 _SSTI_RESULT_RE = re.compile(r"\b49\b")  # {{7*7}} evaluated
+
+_SSRF_RESPONSE_RE = re.compile(
+    r"root:x:0:0:|"                          # /etc/passwd
+    r"169\.254\.169\.254|"                   # cloud metadata IP in body
+    r'"ami-id"|"instance-id"|"hostname"',    # AWS/GCP metadata keys
+    re.IGNORECASE,
+)
 
 _STACKTRACE_RE = re.compile(
     r"Traceback\s+\(most recent call last\)|"
@@ -80,6 +88,28 @@ class ValidationResult:
 class RuleValidator:
     """Runs deterministic security checks against HTTP scan results."""
 
+    def validate(
+        self,
+        result: ScanResult,
+        baseline_result: Any | None = None,
+        interpretation_rules: dict | None = None,
+    ) -> tuple[ValidationResult, bool]:
+        """Run all checks + agent interpretation rules; flag ambiguous results for SLM.
+
+        Returns (ValidationResult, needs_slm_review). When needs_slm_review is True
+        the caller should pass the result to SLMValidator for confirmation.
+        """
+        checks = self.check(result)
+
+        if interpretation_rules and not result.is_error:
+            agent_check = _evaluate_agent_rules(result, baseline_result, interpretation_rules)
+            if agent_check is not None:
+                checks.append(agent_check)
+
+        vr = self.build_result(result, checks)
+        needs_slm = _needs_slm_review(result, baseline_result, checks)
+        return vr, needs_slm
+
     def check(self, result: ScanResult) -> list[RuleCheckResult]:
         """Run all per-result rules against a single scan result."""
         if result.is_error:
@@ -92,6 +122,8 @@ class RuleValidator:
             self._check_admin_endpoint_exposed(result),
             self._check_bola_object_access(result),
             self._check_mass_assignment(result),
+            self._check_ssrf_response(result),
+            self._check_undocumented_endpoint(result),
         ]
 
     def check_rate_limit_batch(self, results: list[ScanResult]) -> RuleCheckResult:
@@ -268,3 +300,164 @@ class RuleValidator:
                 )
 
         return _none
+
+    @staticmethod
+    def _check_ssrf_response(result: ScanResult) -> RuleCheckResult:
+        """API7: SSRF payload triggered an internal-data leak or cloud metadata access."""
+        _none = RuleCheckResult("ssrf_response", False, "high", "", "API7")
+        if result.request.strategy != "ssrf":
+            return _none
+        if not (200 <= result.status_code < 300):
+            return _none
+        match = _SSRF_RESPONSE_RE.search(result.response_body)
+        if not match:
+            return _none
+        return RuleCheckResult(
+            rule_id="ssrf_response",
+            triggered=True,
+            severity="high",
+            evidence=f"SSRF: internal data in response: {match.group(0)[:80]}",
+            owasp_category="API7",
+        )
+
+    @staticmethod
+    def _check_undocumented_endpoint(result: ScanResult) -> RuleCheckResult:
+        """API9: debug/version/docs endpoint returns 200 (should be 404 or auth-gated)."""
+        _none = RuleCheckResult("undocumented_endpoint_exposed", False, "medium", "", "API9")
+        if result.request.strategy not in ("api_version_enumeration", "debug_endpoint_discovery"):
+            return _none
+        if result.status_code != 200:
+            return _none
+        return RuleCheckResult(
+            rule_id="undocumented_endpoint_exposed",
+            triggered=True,
+            severity="medium",
+            evidence=f"Undocumented endpoint {result.request.path} returned 200",
+            owasp_category="API9",
+        )
+
+
+# ── Phase 4: Agent rule evaluation helpers ───────────────────────────────── #
+
+def _evaluate_condition(
+    result: ScanResult,
+    baseline: Any | None,
+    condition: str,
+) -> bool:
+    """Lightweight evaluation of an LLM-produced natural-language condition.
+
+    Supports: status-code keywords (200, 2xx, 401, 403, 404, 500, 4xx), body
+    keywords (error, sql, data, content, json), and baseline-comparison phrases
+    (change, different, bypass, access, successful).
+    Returns False for empty or uninterpretable conditions.
+    """
+    if not condition:
+        return False
+
+    cond = condition.lower()
+    status = result.status_code
+    body = (result.response_body or "").lower()
+
+    # Status-code checks
+    if "200" in cond and 200 <= status < 300:
+        return True
+    if "2xx" in cond and 200 <= status < 300:
+        return True
+    if "500" in cond and status == 500:
+        return True
+    if "403" in cond and status == 403:
+        return True
+    if "401" in cond and status == 401:
+        return True
+    if "404" in cond and status == 404:
+        return True
+    if "429" in cond and status == 429:
+        return True
+    if "4xx" in cond and 400 <= status < 500:
+        return True
+
+    # Body content checks
+    if "error" in cond and any(w in body for w in ("error", "exception", "traceback")):
+        return True
+    if "sql" in cond and bool(_SQL_ERROR_RE.search(result.response_body or "")):
+        return True
+    if "data" in cond and 200 <= status < 300 and len(body) > 30:
+        return True
+    if "content" in cond and len(body) > 50:
+        return True
+    if "json" in cond and 200 <= status < 300 and (body.startswith("{") or body.startswith("[")):
+        return True
+
+    # Baseline-comparison phrases
+    if baseline is not None:
+        baseline_status = getattr(baseline, "status_code", None)
+        if (
+            any(k in cond for k in ("change", "different", "bypass", "access", "successful"))
+            and baseline_status in (401, 403, 404)
+            and 200 <= status < 300
+        ):
+            return True
+
+    return False
+
+
+def _evaluate_agent_rules(
+    result: ScanResult,
+    baseline: Any | None,
+    rules: dict,
+) -> RuleCheckResult | None:
+    """Return a synthetic RuleCheckResult when the agent's confirmed_if condition is met.
+
+    Also evaluates false_positive_if to suppress spurious results.
+    Forces owasp_category to API8 on injection evidence, API1 on cross-user access.
+    """
+    confirmed_if = rules.get("confirmed_if", "")
+    false_positive_if = rules.get("false_positive_if", "")
+
+    if not _evaluate_condition(result, baseline, confirmed_if):
+        return None
+
+    if false_positive_if and _evaluate_condition(result, baseline, false_positive_if):
+        return None
+
+    body = result.response_body or ""
+    if _SQL_ERROR_RE.search(body) or _NOSQL_ERROR_RE.search(body):
+        category = "API8"
+    elif (
+        result.request.headers.get("X-ARIA-Other-User", "").lower() == "true"
+        and 200 <= result.status_code < 300
+    ):
+        category = "API1"
+    else:
+        category = "API_AGENT"
+
+    return RuleCheckResult(
+        rule_id="agent_rule_match",
+        triggered=True,
+        severity="medium",
+        evidence=f"Agent confirmed_if: {confirmed_if[:120]}",
+        owasp_category=category,
+    )
+
+
+def _needs_slm_review(
+    result: ScanResult,
+    baseline: Any | None,
+    checks: list[RuleCheckResult],
+) -> bool:
+    """Return True when SLM confirmation is warranted for an ambiguous result."""
+    if result.is_error:
+        return False
+
+    # Ambiguous status change: baseline was auth-gated but result succeeded
+    if baseline is not None:
+        baseline_status = getattr(baseline, "status_code", None)
+        if baseline_status in (401, 403, 404) and 200 <= result.status_code < 300:
+            return True
+
+    # Agent rule fired without any deterministic rule confirming it
+    agent_fired = any(c.triggered and c.rule_id == "agent_rule_match" for c in checks)
+    deterministic_fired = any(
+        c.triggered for c in checks if c.rule_id != "agent_rule_match"
+    )
+    return agent_fired and not deterministic_fired
